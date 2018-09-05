@@ -48,7 +48,8 @@ public class SmaliParser
     {
         public Component(final String className)
         {
-            this.className = className;
+
+            this.className = className.substring(1, className.length() - 1).replaceAll("/", "\\.");
         }
 
         public String className;
