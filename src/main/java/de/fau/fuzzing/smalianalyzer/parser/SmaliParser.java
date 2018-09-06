@@ -74,8 +74,24 @@ public class SmaliParser
             this.className = className.substring(1, className.length() - 1).replaceAll("/", "\\.");
         }
 
-        public String className;
-        public SetMultimap<String, String> invocations = HashMultimap.create();
+        private transient String className;
+        private SetMultimap<String, String> intentInvocations = HashMultimap.create();
+        private SetMultimap<String, String> bundleInvocations = HashMultimap.create();
+
+        public String getClassName()
+        {
+            return className;
+        }
+
+        public SetMultimap<String, String> getIntentInvocations()
+        {
+            return intentInvocations;
+        }
+
+        public SetMultimap<String, String> getBundleInvocations()
+        {
+            return bundleInvocations;
+        }
     }
 
     public static class Method
@@ -224,7 +240,9 @@ public class SmaliParser
             LOG.debug("Enter method: {}", methodName);
             LOG.debug("Found {} intent methods", method.intentMethods.size());
             for (final Invocation invocation : method.intentMethods)
-                component.invocations.put(invocation.name, invocation.value);
+                component.intentInvocations.put(invocation.name, invocation.value);
+            for (final Invocation invocation : method.bundleMethods)
+                component.bundleInvocations.put(invocation.name, invocation.value);
             for (final String subMethodName : method.selfMethods)
                 addToResult(methods, component, subMethodName, depth + 1);
             LOG.debug("Leave method: {}", methodName);

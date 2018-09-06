@@ -1,6 +1,8 @@
 plugins {
     id 'java'
     id 'application'
+    id 'idea'
+    id 'eclipse'
 }
 
 group 'de.fau.fuzzing'

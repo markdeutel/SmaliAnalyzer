@@ -1,5 +1,6 @@
 package de.fau.fuzzing.smalianalyzer;
 
+import com.google.common.collect.SetMultimap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
@@ -17,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -64,15 +64,15 @@ public class SmaliAnalyzer
                     {
 
                         LOG.info("Parsing component classes");
-                        final Map<String, Map<String, Collection<String>>> result = new HashMap<>();
+                        final Map<String, SmaliParser.Component> result = new HashMap<>();
                         for (final String componentClass : components)
                         {
                             try
                             {
                                 final SmaliParser.Component component = SmaliParser.parseComponent(
                                         getComponentPath(rootPath, componentClass), invocationCallers);
-                                if (!component.invocations.isEmpty())
-                                    result.put(component.className, component.invocations.asMap());
+                                if (!component.getIntentInvocations().isEmpty())
+                                    result.put(component.getClassName(), component);
                             }
                             catch (Exception e)
                             {
@@ -107,13 +107,14 @@ public class SmaliAnalyzer
         return rootPath.resolve(componentClass.substring(1, componentClass.length() - 1).concat(".smali"));
     }
 
-    private static void writeToJsonFile(final Path outputPath, final Map<String, Map<String, Collection<String>>> result) throws IOException
+    private static void writeToJsonFile(final Path outputPath, final Map<String, SmaliParser.Component> result) throws IOException
     {
         try (BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))
         {
             // Build json serializer and write result to file
-            Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+            Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping()
+                    .registerTypeAdapter(SetMultimap.class, new JsonSetMultimapSerializer()).create();
             writer.write(gson.toJson(result));
         }
     }
