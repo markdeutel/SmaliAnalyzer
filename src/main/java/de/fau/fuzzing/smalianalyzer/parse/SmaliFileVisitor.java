@@ -1,4 +1,4 @@
-package de.fau.fuzzing.smalianalyzer.parser;
+package de.fau.fuzzing.smalianalyzer.parse;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.SetMultimap;

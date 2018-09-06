@@ -1,23 +1,15 @@
 package de.fau.fuzzing.smalianalyzer;
 
-import com.google.common.collect.SetMultimap;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
-import de.fau.fuzzing.smalianalyzer.parser.SmaliFileVisitor;
-import de.fau.fuzzing.smalianalyzer.parser.SmaliParser;
+import de.fau.fuzzing.smalianalyzer.parse.SmaliFileVisitor;
+import de.fau.fuzzing.smalianalyzer.parse.SmaliParser;
+import de.fau.fuzzing.smalianalyzer.serialize.JsonWriter;
 import org.apache.commons.cli.*;
-import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +21,7 @@ public class SmaliAnalyzer
     private static final String DEFAULT_OUTPUT_PATH = "./output.json";
     private static final String USAGE_STRING = "smalianalyzer [OPTIONS] <FILE>";
 
-    public static void main(String[] args) throws IOException, ParseException
+    public static void main(String[] args) throws ParseException
     {
         final Options options = new Options();
         options.addOption("h", "Print this dialog");
@@ -81,13 +73,12 @@ public class SmaliAnalyzer
                         }
 
                         LOG.info("Writing result to file: {}", outputPath.toString());
-                        writeToJsonFile(outputPath, result);
+                        JsonWriter.writeToFile(outputPath, result);
                     }
                 }
 
                 // cleanup before exiting
-                LOG.info("Deleting temporary files");
-                FileUtils.deleteDirectory(rootPath.toFile());
+                ApkDecoder.deleteTemporaryFiles(rootPath);
             }
         }
         else
@@ -105,17 +96,5 @@ public class SmaliAnalyzer
     private static Path getComponentPath(final Path rootPath, final String componentClass)
     {
         return rootPath.resolve(componentClass.substring(1, componentClass.length() - 1).concat(".smali"));
-    }
-
-    private static void writeToJsonFile(final Path outputPath, final Map<String, SmaliParser.Component> result) throws IOException
-    {
-        try (BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))
-        {
-            // Build json serializer and write result to file
-            Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping()
-                    .registerTypeAdapter(SetMultimap.class, new JsonSetMultimapSerializer()).create();
-            writer.write(gson.toJson(result));
-        }
     }
 }

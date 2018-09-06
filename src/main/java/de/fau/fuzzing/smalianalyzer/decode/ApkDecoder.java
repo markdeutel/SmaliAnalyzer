@@ -1,5 +1,6 @@
 package de.fau.fuzzing.smalianalyzer.decode;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jf.baksmali.Baksmali;
@@ -9,6 +10,7 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.ZipDexContainer;
 
+import java.io.IOException;
 import java.nio.file.Path;
 
 /**
@@ -61,6 +63,19 @@ public class ApkDecoder
         {
             LOG.error("Failed decoding apk file:", e);
             return false;
+        }
+    }
+
+    public static void deleteTemporaryFiles(final Path filePath)
+    {
+        try
+        {
+            LOG.info("Deleting temporary files");
+            FileUtils.deleteDirectory(filePath.toFile());
+        }
+        catch (IOException e)
+        {
+            LOG.error("Failed deleting files:", e);
         }
     }
 }

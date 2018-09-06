@@ -1,4 +1,4 @@
-package de.fau.fuzzing.smalianalyzer.parser;
+package de.fau.fuzzing.smalianalyzer.parse;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.SetMultimap;
@@ -19,8 +19,8 @@ public class SmaliParser
 {
     private static final Logger LOG = LogManager.getLogger(SmaliParser.class.getName());
 
-    public static final String INTENT_CLASS = "Landroid/content/Intent;";
-    public static final String BUNDLE_CLASS = "Landroid/os/Bundle;";
+    private static final String INTENT_CLASS = "Landroid/content/Intent;";
+    private static final String BUNDLE_CLASS = "Landroid/os/Bundle;";
 
     private static final String CLASS_NAME = "\\.class .*;";
     private static final String SUPER_CLASS = "\\.super .*;";
@@ -181,6 +181,30 @@ public class SmaliParser
                     line = line.trim();
                     if (line.matches(END_METHOD))
                         break;
+
+                    // check for intent caller calls
+                    if (invocationCallers != null)
+                    {
+                        for (final String intentCaller : invocationCallers.getIntentInvocationCallers().keySet())
+                        {
+                            if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, intentCaller)))
+                            {
+                                final Invocation invocation = parseIntentInvocationLine(line, registerMap);
+                                if (invocationCallers.getIntentInvocationCallers().get(intentCaller).contains(invocation.getName()))
+                                    method.intentMethods.add(invocation);
+                            }
+                        }
+
+                        for (final String bundleCaller : invocationCallers.getBundleInvocationCallers().keySet())
+                        {
+                            if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, bundleCaller)))
+                            {
+                                final Invocation invocation = parseIntentInvocationLine(line, registerMap);
+                                if (invocationCallers.getBundleInvocationCallers().get(bundleCaller).contains(invocation.getName()))
+                                    method.bundleMethods.add(invocation);
+                            }
+                        }
+                    }
 
                     // check for intent calls
                     if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, INTENT_CLASS)))
