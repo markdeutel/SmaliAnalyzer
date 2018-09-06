@@ -2,7 +2,11 @@ package de.fau.fuzzing.smalianalyzer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
+import de.fau.fuzzing.smalianalyzer.parser.SmaliFileVisitor;
+import de.fau.fuzzing.smalianalyzer.parser.SmaliParser;
 import org.apache.commons.cli.*;
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -25,11 +29,6 @@ public class SmaliAnalyzer
     private static final String DEFAULT_OUTPUT_PATH = "./output.json";
     private static final String USAGE_STRING = "smalianalyzer [OPTIONS] <FILE>";
 
-    public static Map<String, Map<String, Collection<String>>> analyseProject(final Path rootPath) throws IOException
-    {
-        return null; //ComponentVisitor.searchFileTree(rootPath);
-    }
-
     public static void main(String[] args) throws IOException, ParseException
     {
         final Options options = new Options();
@@ -44,7 +43,7 @@ public class SmaliAnalyzer
         {
             outputPath = Paths.get(commandLine.getOptionValue("o"));
         }
-        else if (commandLine.hasOption("-h"))
+        else if (commandLine.hasOption("h"))
         {
             printHelp(options);
             return;
@@ -53,36 +52,43 @@ public class SmaliAnalyzer
         args = commandLine.getArgs();
         if (args.length >= 1)
         {
-            Path rootPath = Paths.get(args[0]);
-            LOG.info("Analyzing project: {}", rootPath.toString());
-
-            LOG.info("Searching component classes");
-            final Set<String> components = ComponentVisitor.searchFileTree(rootPath);
-            LOG.info("Found {}", components.size());
-
-            LOG.info("Searching invocation caller");
-            final Set<String> invocationCaller = InvocationCallerVisitor.searchFileTree(rootPath, components);
-            LOG.info("Found {}", invocationCaller.size());
-
-            LOG.info("Parsing component classes");
-            final Map<String, Map<String, Collection<String>>> result = new HashMap<>();
-            for (final String componentClass : components)
+            Path sourcePath = Paths.get(args[0]);
+            Path rootPath = Paths.get("./tmp");
+            if (ApkDecoder.decode(sourcePath, rootPath))
             {
-                try
+                final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
+                if (components != null)
                 {
-                    final SmaliParser.Component component = SmaliParser.parseComponent(
-                            getComponentPath(rootPath, componentClass), invocationCaller);
-                    if (!component.invocations.isEmpty())
-                        result.put(component.className, component.invocations.asMap());
-                }
-                catch (Exception e)
-                {
-                    LOG.error(e);
-                }
-            }
+                    final SmaliFileVisitor.InvocationCallers invocationCallers = SmaliFileVisitor.searchFileTreeForInvocationCallers(rootPath, components);
+                    if (invocationCallers != null)
+                    {
 
-            LOG.info("Writing result to file: {}", outputPath.toString());
-            writeToJsonFile(outputPath, result);
+                        LOG.info("Parsing component classes");
+                        final Map<String, Map<String, Collection<String>>> result = new HashMap<>();
+                        for (final String componentClass : components)
+                        {
+                            try
+                            {
+                                final SmaliParser.Component component = SmaliParser.parseComponent(
+                                        getComponentPath(rootPath, componentClass), invocationCallers);
+                                if (!component.invocations.isEmpty())
+                                    result.put(component.className, component.invocations.asMap());
+                            }
+                            catch (Exception e)
+                            {
+                                LOG.error(e);
+                            }
+                        }
+
+                        LOG.info("Writing result to file: {}", outputPath.toString());
+                        writeToJsonFile(outputPath, result);
+                    }
+                }
+
+                // cleanup before exiting
+                LOG.info("Deleting temporary files");
+                FileUtils.deleteDirectory(rootPath.toFile());
+            }
         }
         else
         {

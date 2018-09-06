@@ -1,8 +1,7 @@
-package de.fau.fuzzing.smalianalyzer;
+package de.fau.fuzzing.smalianalyzer.parser;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.SetMultimap;
-import com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -10,7 +9,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 public class SmaliParser
@@ -18,6 +20,7 @@ public class SmaliParser
     private static final Logger LOG = LogManager.getLogger(SmaliParser.class.getName());
 
     public static final String INTENT_CLASS = "Landroid/content/Intent;";
+    public static final String BUNDLE_CLASS = "Landroid/os/Bundle;";
 
     private static final String CLASS_NAME = "\\.class .*;";
     private static final String SUPER_CLASS = "\\.super .*;";
@@ -34,21 +37,40 @@ public class SmaliParser
 
     public static class ClassHeader
     {
-        public String name;
-        public String superClass;
+        private String name = "";
+        private String superClass = "";
+
+        public String getName()
+        {
+            return name;
+        }
+
+        public String getSuperClass()
+        {
+            return superClass;
+        }
     }
 
     public static class Class
     {
-        public String className;
-        public Map<String, Method> methods = new HashMap<>();
+        private String className = "";
+        private Map<String, Method> methods = new HashMap<>();
+
+        public String getClassName()
+        {
+            return className;
+        }
+
+        public Map<String, Method> getMethods()
+        {
+            return methods;
+        }
     }
 
     public static class Component
     {
-        public Component(final String className)
+        private Component(final String className)
         {
-
             this.className = className.substring(1, className.length() - 1).replaceAll("/", "\\.");
         }
 
@@ -58,14 +80,40 @@ public class SmaliParser
 
     public static class Method
     {
-        public List<String> selfMethods = new ArrayList<>();
-        public List<Invocation> intentMethods = new ArrayList<>();
+        private List<String> selfMethods = new ArrayList<>();
+        private List<Invocation> intentMethods = new ArrayList<>();
+        private List<Invocation> bundleMethods = new ArrayList<>();
+
+        public List<String> getSelfMethods()
+        {
+            return selfMethods;
+        }
+
+        public List<Invocation> getIntentMethods()
+        {
+            return intentMethods;
+        }
+
+        public List<Invocation> getBundleMethods()
+        {
+            return bundleMethods;
+        }
     }
 
     public static class Invocation
     {
-        public String name = "";
-        public String value = "";
+        private String name = "";
+        private String value = "";
+
+        public String getName()
+        {
+            return name;
+        }
+
+        public String getValue()
+        {
+            return value;
+        }
     }
 
     public static ClassHeader peekHeader(final Path filePath) throws IOException
@@ -87,7 +135,7 @@ public class SmaliParser
         }
     }
 
-    public static Class parse(final Path filePath, final Set<String> invocationCallers) throws IOException
+    public static Class parse(final Path filePath, final SmaliFileVisitor.InvocationCallers invocationCallers) throws IOException
     {
         LOG.debug("---------------------------------------------------");
         LOG.debug("Parsing file: {}", filePath.getFileName().toString());
@@ -118,22 +166,26 @@ public class SmaliParser
                     if (line.matches(END_METHOD))
                         break;
 
-                    // check for invocations
-                    for (final String invocationCaller : invocationCallers)
+                    // check for intent calls
+                    if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, INTENT_CLASS)))
                     {
-                        if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, invocationCaller)))
-                        {
-                            final Invocation invocation = parseIntentInvocationLine(line, registerMap);
-                            if (invocation.name.toLowerCase().contains("get"))
-                                method.intentMethods.add(invocation);
-                        }
+                        final Invocation invocation = parseIntentInvocationLine(line, registerMap);
+                        if (invocation.name.toLowerCase().contains("get"))
+                            method.intentMethods.add(invocation);
                     }
-
-                    // check for invocations of own classes and loading of registers
-                    if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, klass.className)))
+                    // check for bundles
+                    else if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, BUNDLE_CLASS)))
+                    {
+                        final Invocation invocation = parseIntentInvocationLine(line, registerMap);
+                        if (invocation.name.toLowerCase().contains("get"))
+                            method.bundleMethods.add(invocation);
+                    }
+                    // check for invocations of own classes
+                    else if (line.matches(String.format(INVOKE_METHOD_TEMPLATE, klass.className)))
                     {
                         method.selfMethods.add(line.substring(line.indexOf("->") + 2));
                     }
+                    // check for loading of registers
                     else if (line.matches(SET_CONST_STRING))
                     {
                         final String register = line.substring(line.indexOf(' ') + 1, line.indexOf(','));
@@ -150,10 +202,10 @@ public class SmaliParser
 
     public static Class parse(final Path filePath) throws IOException
     {
-        return parse(filePath, Sets.newHashSet(INTENT_CLASS));
+        return parse(filePath, null);
     }
 
-    public static Component parseComponent(final Path filePath, final Set<String> invocationCallers) throws IOException
+    public static Component parseComponent(final Path filePath, final SmaliFileVisitor.InvocationCallers invocationCallers) throws IOException
     {
         final Class klass = parse(filePath, invocationCallers);
         final Component component = new Component(klass.className);
