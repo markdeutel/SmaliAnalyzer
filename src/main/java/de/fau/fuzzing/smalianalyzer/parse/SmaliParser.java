@@ -9,10 +9,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class SmaliParser
@@ -245,7 +242,8 @@ public class SmaliParser
         return parse(filePath, null);
     }
 
-    public static Component parseComponent(final Path filePath, final SmaliFileVisitor.InvocationCallers invocationCallers) throws IOException
+    public static Component parseComponent(final Path filePath,
+                                           final SmaliFileVisitor.InvocationCallers invocationCallers) throws IOException
     {
         final Class klass = parse(filePath, invocationCallers);
         final Component component = new Component(klass.className);
@@ -254,6 +252,47 @@ public class SmaliParser
         addToResult(klass.methods, component, SERVICE_START_COMMAND, 0);
         addToResult(klass.methods, component, BROADCAST_RECEIVER_START_COMMAND, 0);
         return component;
+    }
+
+    public static Map<String, Component> parseComponents(final Path rootPath, final Collection<String> components,
+                                                         final SmaliFileVisitor.InvocationCallers invocationCallers)
+    {
+        LOG.info("Parsing component classes");
+        final List<Path> componentPaths = new ArrayList<>(components.size());
+        for (final String component : components)
+            componentPaths.add(getComponentPath(rootPath, component));
+
+        try
+        {
+            final Map<String, SmaliParser.Component> result = new HashMap<>();
+
+            int numThreads = Runtime.getRuntime().availableProcessors();
+            int stride = componentPaths.size() / numThreads;
+            Thread workers[] = new Thread[numThreads];
+            for (int i = 0; i < numThreads; ++i)
+            {
+                int start = i * stride;
+                int end = start + stride;
+                if (i == workers.length - 1)
+                    end = componentPaths.size();
+
+                workers[i] = new ParsingWorker(start, end, componentPaths, invocationCallers);
+                workers[i].start();
+            }
+
+            for (int i = 0; i < numThreads; ++i)
+            {
+                workers[i].join();
+                result.putAll(((ParsingWorker) workers[i]).getResult());
+            }
+
+            return result;
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed parsing components:", e);
+            return null;
+        }
     }
 
     private static void addToResult(final Map<String, Method> methods, final Component component, final String methodName, int depth)
@@ -281,5 +320,10 @@ public class SmaliParser
         if (registers.length >= 2)
             invocation.value = registerMap.getOrDefault(registers[1], "");
         return invocation;
+    }
+
+    private static Path getComponentPath(final Path rootPath, final String componentClass)
+    {
+        return rootPath.resolve(componentClass.substring(1, componentClass.length() - 1).concat(".smali"));
     }
 }

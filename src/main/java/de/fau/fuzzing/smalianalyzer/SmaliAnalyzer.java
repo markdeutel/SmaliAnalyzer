@@ -8,9 +8,11 @@ import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -45,40 +47,13 @@ public class SmaliAnalyzer
         if (args.length >= 1)
         {
             Path sourcePath = Paths.get(args[0]);
-            Path rootPath = Paths.get("./tmp");
-            if (ApkDecoder.decode(sourcePath, rootPath))
+            if (Files.isDirectory(sourcePath))
             {
-                final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
-                if (components != null)
-                {
-                    final SmaliFileVisitor.InvocationCallers invocationCallers = SmaliFileVisitor.searchFileTreeForInvocationCallers(rootPath, components);
-                    if (invocationCallers != null)
-                    {
-
-                        LOG.info("Parsing component classes");
-                        final Map<String, SmaliParser.Component> result = new HashMap<>();
-                        for (final String componentClass : components)
-                        {
-                            try
-                            {
-                                final SmaliParser.Component component = SmaliParser.parseComponent(
-                                        getComponentPath(rootPath, componentClass), invocationCallers);
-                                if (!component.getIntentInvocations().isEmpty() || !component.getBundleInvocations().isEmpty())
-                                    result.put(component.getClassName(), component);
-                            }
-                            catch (Exception e)
-                            {
-                                LOG.error(e);
-                            }
-                        }
-
-                        LOG.info("Writing result to file: {}", outputPath.toString());
-                        JsonWriter.writeToFile(outputPath, result);
-                    }
-                }
-
-                // cleanup before exiting
-                ApkDecoder.deleteTemporaryFiles(rootPath);
+                decodeApks(sourcePath, outputPath);
+            }
+            else if (Files.isRegularFile(sourcePath))
+            {
+                decodeApk(sourcePath, outputPath);
             }
         }
         else
@@ -87,14 +62,48 @@ public class SmaliAnalyzer
         }
     }
 
+    private static void decodeApk(final Path sourcePath, final Path outputPath)
+    {
+        Path rootPath = Paths.get("./tmp");
+        if (ApkDecoder.decode(sourcePath, rootPath))
+        {
+            final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
+            if (components != null)
+            {
+                final SmaliFileVisitor.InvocationCallers invocationCallers =
+                        SmaliFileVisitor.searchFileTreeForInvocationCallers(rootPath, components);
+                if (invocationCallers != null)
+                {
+                    final Map<String, SmaliParser.Component> result = SmaliParser.parseComponents(rootPath, components, invocationCallers);
+                    if (result != null)
+                        JsonWriter.writeToFile(outputPath, result);
+                }
+            }
+
+            // cleanup before exiting
+            ApkDecoder.deleteTemporaryFiles(rootPath);
+        }
+    }
+
+    private static void decodeApks(final Path sourcePath, final Path outputPath)
+    {
+        try (final DirectoryStream<Path> directoryStream = Files.newDirectoryStream(sourcePath, "*.apk"))
+        {
+            for (final Path apkFile : directoryStream)
+            {
+                final Path jsonOutputPath = outputPath.resolve(apkFile.getFileName().toString().replaceAll(".apk", ".json"));
+                decodeApk(apkFile, jsonOutputPath);
+            }
+        }
+        catch (IOException e)
+        {
+            LOG.error("Failed parsing directory: " + sourcePath.toString(), e);
+        }
+    }
+
     private static void printHelp(final Options options)
     {
         HelpFormatter helpFormatter = new HelpFormatter();
         helpFormatter.printHelp(USAGE_STRING, options);
-    }
-
-    private static Path getComponentPath(final Path rootPath, final String componentClass)
-    {
-        return rootPath.resolve(componentClass.substring(1, componentClass.length() - 1).concat(".smali"));
     }
 }
