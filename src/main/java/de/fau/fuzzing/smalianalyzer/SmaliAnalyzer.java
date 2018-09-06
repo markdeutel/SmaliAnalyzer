@@ -71,7 +71,7 @@ public class SmaliAnalyzer
                             {
                                 final SmaliParser.Component component = SmaliParser.parseComponent(
                                         getComponentPath(rootPath, componentClass), invocationCallers);
-                                if (!component.getIntentInvocations().isEmpty())
+                                if (!component.getIntentInvocations().isEmpty() || !component.getBundleInvocations().isEmpty())
                                     result.put(component.getClassName(), component);
                             }
                             catch (Exception e)
