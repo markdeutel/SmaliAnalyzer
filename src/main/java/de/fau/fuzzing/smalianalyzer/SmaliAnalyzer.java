@@ -1,5 +1,6 @@
 package de.fau.fuzzing.smalianalyzer;
 
+import com.google.common.collect.SetMultimap;
 import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliFileVisitor;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliParser;
@@ -20,7 +21,7 @@ public class SmaliAnalyzer
 {
     private static final Logger LOG = LogManager.getLogger(SmaliAnalyzer.class.getName());
 
-    private static final String DEFAULT_OUTPUT_PATH = "./output.json";
+    private static final String DEFAULT_OUTPUT_PATH = "./";
     private static final String USAGE_STRING = "smalianalyzer [OPTIONS] <FILE>";
 
     public static void main(String[] args) throws ParseException
@@ -46,7 +47,7 @@ public class SmaliAnalyzer
         args = commandLine.getArgs();
         if (args.length >= 1)
         {
-            Path sourcePath = Paths.get(args[0]);
+            final Path sourcePath = Paths.get(args[0]);
             if (Files.isDirectory(sourcePath))
             {
                 decodeApks(sourcePath, outputPath);
@@ -67,6 +68,10 @@ public class SmaliAnalyzer
         Path rootPath = Paths.get("./tmp");
         if (ApkDecoder.decode(sourcePath, rootPath))
         {
+            final SetMultimap<String, String> actionsResult = ApkDecoder.decodeManifest(sourcePath);
+            if (actionsResult != null)
+                JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".meta")), actionsResult.asMap());
+
             final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
             if (components != null)
             {
@@ -76,7 +81,7 @@ public class SmaliAnalyzer
                 {
                     final Map<String, SmaliParser.Component> result = SmaliParser.parseComponents(rootPath, components, invocationCallers);
                     if (result != null)
-                        JsonWriter.writeToFile(outputPath, result);
+                        JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".json")), result);
                 }
             }
 
@@ -91,8 +96,7 @@ public class SmaliAnalyzer
         {
             for (final Path apkFile : directoryStream)
             {
-                final Path jsonOutputPath = outputPath.resolve(apkFile.getFileName().toString().replaceAll(".apk", ".json"));
-                decodeApk(apkFile, jsonOutputPath);
+                decodeApk(apkFile, outputPath);
             }
         }
         catch (IOException e)

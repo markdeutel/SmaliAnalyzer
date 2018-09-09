@@ -28,6 +28,7 @@ public class JsonWriter
             LOG.info("Writing result to json file: {}", outputPath.toString());
             Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping()
                     .registerTypeAdapter(SetMultimap.class, new JsonSetMultimapSerializer()).create();
+
             writer.write(gson.toJson(data));
         }
         catch (IOException e)

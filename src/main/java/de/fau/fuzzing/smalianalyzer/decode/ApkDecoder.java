@@ -1,5 +1,7 @@
 package de.fau.fuzzing.smalianalyzer.decode;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.SetMultimap;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -10,7 +12,9 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.ZipDexContainer;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Path;
 
 /**
@@ -63,6 +67,61 @@ public class ApkDecoder
         {
             LOG.error("Failed decoding apk file:", e);
             return false;
+        }
+    }
+
+    public static SetMultimap<String, String> decodeManifest(final Path apkFilePath)
+    {
+        try
+        {
+            LOG.info("Decoding AndroidManifest.xml file");
+
+            final SetMultimap<String, String> actions = HashMultimap.create();
+            final String[] cmd = {"./ext/aapt", "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
+            final Process process = Runtime.getRuntime().exec(cmd);
+            try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
+            {
+                try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
+                {
+                    String line, componentName = "";
+                    while ((line = inputReader.readLine()) != null)
+                    {
+                        line = line.trim();
+                        if (line.startsWith("E: activity"))
+                        {
+                            while ((line = inputReader.readLine()) != null)
+                            {
+                                line = line.trim();
+                                if (line.startsWith("A: android:name(0x01010003)"))
+                                {
+                                    componentName = line.substring(line.indexOf('"') + 1);
+                                    componentName = componentName.substring(0, componentName.indexOf('"'));
+                                    break;
+                                }
+                            }
+                        }
+                        else if (line.startsWith("E: action"))
+                        {
+                            String actionLine = inputReader.readLine();
+                            actionLine = actionLine.substring(actionLine.indexOf('"') + 1);
+                            actionLine = actionLine.substring(0, actionLine.indexOf('"'));
+                            actions.put(componentName, actionLine);
+                        }
+                    }
+
+                    while ((line = errorReader.readLine()) != null)
+                    {
+                        LOG.error(line);
+                    }
+
+                    return actions;
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            LOG.error("Failed decoding manifest file:", e);
+            return null;
         }
     }
 
