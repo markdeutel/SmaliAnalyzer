@@ -32,6 +32,7 @@ public class ApkDecoder
     {
         private Set<String> actions = Sets.newHashSet();
         private Set<String> categories = Sets.newHashSet();
+        private Set<String> data = Sets.newHashSet();
 
         public Set<String> getActions()
         {
@@ -41,6 +42,11 @@ public class ApkDecoder
         public Set<String> getCategories()
         {
             return categories;
+        }
+
+        public Set<String> getData()
+        {
+            return data;
         }
     }
 
@@ -103,19 +109,75 @@ public class ApkDecoder
             {
                 try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
                 {
+                    boolean dataTag = false;
                     String line, componentName = "";
                     SetMultimap<String, String> dataMap = null;
+                    String scheme = "%s", host = "%s", port = "%s", path = "%s", pathPrefix = null, pathPattern = null;
                     while ((line = inputReader.readLine()) != null)
                     {
                         line = line.trim();
-                        if (line.startsWith("E: activity"))
+
+                        // read data tag
+                        if (dataTag)
+                        {
+                            if (line.startsWith("A: android:scheme"))
+                            {
+                                scheme = unpackLine(line, scheme);
+                                continue;
+                            }
+                            else if (line.startsWith("android:host"))
+                            {
+                                host = unpackLine(line, host);
+                                continue;
+                            }
+                            else if (line.startsWith("A: android:port"))
+                            {
+                                port = unpackLine(line, port);
+                                continue;
+                            }
+                            else if (line.startsWith("A: android:path"))
+                            {
+                                path = unpackLine(line, path);
+                                continue;
+                            }
+                            else if (line.startsWith("A: android:pathPrefix"))
+                            {
+                                pathPrefix = unpackLine(line, pathPrefix);
+                                continue;
+                            }
+                            else if (line.startsWith("A: android:pathPattern"))
+                            {
+                                pathPattern = unpackLine(line, pathPattern);
+                                continue;
+                            }
+
+                            // <scheme>://<host>:<port>[<path>|<pathPrefix>|<pathPattern>]
+                            final StringBuilder sb = new StringBuilder();
+                            sb.append(scheme).append("://").append(host).append(":").append(port).append(path);
+                            if (pathPrefix != null || pathPattern != null)
+                            {
+                                if (pathPrefix == null)
+                                    sb.append(pathPrefix);
+                                else
+                                    sb.append(pathPattern);
+                            }
+
+                            final String dataString = sb.toString().replaceAll("\\.", "").replaceAll("\\*", "%s");
+                            dataMap.put("data", dataString);
+                            dataTag = false;
+                        }
+
+                        // read all other tags
+                        if (line.startsWith("E: activity") || line.startsWith("E: service") || line.startsWith("E: receiver"))
                         {
                             if (dataMap != null)
                             {
                                 final IntentFilter intentFilter = new IntentFilter();
                                 intentFilter.actions.addAll(dataMap.get("actions"));
                                 intentFilter.categories.addAll(dataMap.get("categories"));
-                                if (intentFilter.actions.size() > 0 || intentFilter.categories.size() > 0)
+                                intentFilter.data.addAll(dataMap.get("data"));
+                                if (intentFilter.actions.size() > 0 || intentFilter.categories.size() > 0 ||
+                                        intentFilter.data.size() > 0)
                                     result.put(componentName, intentFilter);
                             }
 
@@ -133,21 +195,15 @@ public class ApkDecoder
                         }
                         else if (line.startsWith("E: action"))
                         {
-                            String actionLine = inputReader.readLine();
-                            actionLine = actionLine.substring(actionLine.indexOf('"') + 1);
-                            actionLine = actionLine.substring(0, actionLine.indexOf('"'));
-                            dataMap.put("actions", actionLine);
+                            dataMap.put("actions", unpackLine(inputReader.readLine()));
                         }
                         else if (line.startsWith("E: category"))
                         {
-                            String categoryLine = inputReader.readLine();
-                            categoryLine = categoryLine.substring(categoryLine.indexOf('"') + 1);
-                            categoryLine = categoryLine.substring(0, categoryLine.indexOf('"'));
-                            dataMap.put("categories", categoryLine);
+                            dataMap.put("categories", unpackLine(inputReader.readLine()));
                         }
                         else if (line.startsWith("E: data"))
                         {
-
+                            dataTag = true;
                         }
                     }
 
@@ -164,6 +220,24 @@ public class ApkDecoder
         {
             LOG.error("Failed decoding manifest file:", e);
             return null;
+        }
+    }
+
+    private static String unpackLine(final String line)
+    {
+        return unpackLine(line, "");
+    }
+
+    private static String unpackLine(final String line, final String fallback)
+    {
+        try
+        {
+            String result = line.substring(line.indexOf('"') + 1);
+            return result.substring(0, result.indexOf('"'));
+        }
+        catch (Exception e)
+        {
+            return fallback;
         }
     }
 
