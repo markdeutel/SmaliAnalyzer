@@ -3,3 +3,4 @@ out/
 .gradle/
 .idea/
 *.json
+*.meta

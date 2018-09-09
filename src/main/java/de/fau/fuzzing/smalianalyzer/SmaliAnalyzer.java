@@ -1,6 +1,5 @@
 package de.fau.fuzzing.smalianalyzer;
 
-import com.google.common.collect.SetMultimap;
 import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliFileVisitor;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliParser;
@@ -68,9 +67,9 @@ public class SmaliAnalyzer
         Path rootPath = Paths.get("./tmp");
         if (ApkDecoder.decode(sourcePath, rootPath))
         {
-            final SetMultimap<String, String> actionsResult = ApkDecoder.decodeManifest(sourcePath);
+            final Map<String, ApkDecoder.IntentFilter> actionsResult = ApkDecoder.decodeManifest(sourcePath);
             if (actionsResult != null)
-                JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".meta")), actionsResult.asMap());
+                JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".meta")), actionsResult);
 
             final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
             if (components != null)
