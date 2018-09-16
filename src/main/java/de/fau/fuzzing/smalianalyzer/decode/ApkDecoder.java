@@ -4,6 +4,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.SetMultimap;
 import com.google.common.collect.Sets;
+import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -103,7 +104,7 @@ public class ApkDecoder
             LOG.info("Decoding AndroidManifest.xml file");
 
             final Map<String, IntentFilter> result = Maps.newHashMap();
-            final String[] cmd = {"./ext/aapt", "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
+            final String[] cmd = {ApplicationProperties.getInstance().getAAPTPath(), "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
             final Process process = Runtime.getRuntime().exec(cmd);
             try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
             {
