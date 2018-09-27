@@ -42,15 +42,17 @@ public class SmaliAnalyzer
 
         final Path sourcePath = Paths.get(args[0]);
         final Path outputPath = Paths.get(args[1]);
-        if (Files.isRegularFile(sourcePath, LinkOption.NOFOLLOW_LINKS) &&
-                Files.isRegularFile(outputPath, LinkOption.NOFOLLOW_LINKS))
+        if (Files.isRegularFile(sourcePath, LinkOption.NOFOLLOW_LINKS))
         {
             analyzeApk(sourcePath, outputPath);
         }
-        else if (Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS) &&
-                Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS))
+        else if (Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS))
         {
             analyzeApkFolder(sourcePath, outputPath);
+        }
+        else
+        {
+            LOG.info("source and output path have to be either both files or directories");
         }
     }
 
@@ -86,6 +88,9 @@ public class SmaliAnalyzer
                     JsonWriter.writeToFile(Paths.get(outputPath.toString().replaceAll(".json", ".meta")), manifestResult);
 
                 final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
+
+                int count = 0;
+                LOG.info("Parsing found components");
                 final Map<String, ParsingResult> result = Maps.newHashMap();
                 for (final Path filePath : indexer.getComponentList())
                 {
@@ -93,10 +98,14 @@ public class SmaliAnalyzer
                     final SetMultimap<String, String> intentResults = HashMultimap.create();
                     final SetMultimap<String, String> bundleResults = HashMultimap.create();
                     for (final String methodName : Constants.COMPONENT_ENTRY_METHODS)
-                        SmaliFileParser.parseMethod(filePath, methodName, indexer.getIndexMap(), intentResults, bundleResults, 0);
+                    {
+                        final Map<String, String> registerMap = Maps.newHashMap();
+                        SmaliFileParser.parseMethod(filePath, methodName, indexer.getIndexMap(), registerMap, intentResults, bundleResults, 0);
+                    }
 
                     if (!intentResults.isEmpty() || !bundleResults.isEmpty())
                         result.put(componentName, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
+                    count++;
                 }
 
                 JsonWriter.writeToFile(outputPath, result);

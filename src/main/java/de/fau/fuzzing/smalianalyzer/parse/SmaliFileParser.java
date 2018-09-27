@@ -1,5 +1,6 @@
 package de.fau.fuzzing.smalianalyzer.parse;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.SetMultimap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -8,7 +9,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -43,7 +43,7 @@ public class SmaliFileParser
         }
     }
 
-    public static void parseMethod(final Path filePath, final String methodName, final Map<String, Index> indexMap,
+    public static void parseMethod(final Path filePath, final String methodName, final Map<String, Index> indexMap, final Map<String, String> registerMap,
                                    final SetMultimap<String, String> intentResultMap, final SetMultimap<String, String> bundleResultMap, int depth) throws IOException
     {
         try (BufferedReader reader = Files.newBufferedReader(filePath))
@@ -56,7 +56,6 @@ public class SmaliFileParser
                 {
                     // found method
                     LOG.debug("Parsing method: {}", methodName);
-                    final Map<String, String> registerMap = new HashMap<>();
                     while ((line = reader.readLine()) != null)
                     {
                         line = line.trim();
@@ -70,7 +69,7 @@ public class SmaliFileParser
                             {
                                 if (registers.length > 1)
                                 {
-                                    final String value = registerMap.getOrDefault(registers[1], null);
+                                    final String value = registerMap.get(registers[1]);
                                     if (value != null)
                                         intentResultMap.put(name, value);
                                 }
@@ -88,7 +87,19 @@ public class SmaliFileParser
                             {
                                 final Index index = indexMap.get(caller);
                                 final String fullName = line.substring(line.indexOf("->") + 2);
-                                parseMethod(index.getFilePath(), fullName, indexMap, intentResultMap, bundleResultMap, depth + 1);
+
+                                int paramCount = 0;
+                                int startIndex = line.startsWith("invoke-static") ? 0 : 1;
+                                final Map<String, String> subRegisterMap = Maps.newHashMap();
+                                for (int i = startIndex; i < registers.length; ++i)
+                                {
+                                    final String value = registerMap.get(registers[i]);
+                                    if (value != null)
+                                        subRegisterMap.put("p" + paramCount, value);
+                                    paramCount++;
+                                }
+
+                                parseMethod(index.getFilePath(), fullName, indexMap, subRegisterMap, intentResultMap, bundleResultMap, depth + 1);
 
                             }
                         }

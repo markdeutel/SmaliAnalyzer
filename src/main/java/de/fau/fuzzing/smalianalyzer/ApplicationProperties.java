@@ -4,14 +4,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Properties;
 
 public class ApplicationProperties
 {
     private static final Logger LOG = LogManager.getLogger();
-    private static final String PROPERTIES_PATH = "./application.properties";
+    private static final String PROPERTIES_PATH = "application.properties";
 
     private String aaptPath = null;
 
@@ -22,7 +20,7 @@ public class ApplicationProperties
         try
         {
             final Properties properties = new Properties();
-            properties.load(Files.newInputStream(Paths.get(PROPERTIES_PATH)));
+            properties.load(ClassLoader.getSystemClassLoader().getResourceAsStream(PROPERTIES_PATH));
             aaptPath = properties.getProperty("android.sdk.aapt.path", "");
         }
         catch (IOException e)

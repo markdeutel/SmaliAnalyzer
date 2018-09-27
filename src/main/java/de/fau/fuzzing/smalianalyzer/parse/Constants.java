@@ -6,7 +6,7 @@ import java.util.Set;
 
 public class Constants
 {
-    public static final int MAX_DEPTH = 1;
+    public static final int MAX_DEPTH = 2;
     public static final Set<String> ANDROID_COMPONENTS = Sets.newHashSet(
             // activities
             "Landroid/app/Activity;",
