@@ -1,0 +1,93 @@
+package de.fau.fuzzing.smalianalyzer.parse;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public class SmaliProjectIndexer
+{
+    private static final Logger LOG = LogManager.getLogger();
+
+    private final Path projectRootPath;
+    private final List<Path> componentList = Lists.newArrayList();
+    private final Map<String, Index> indexMap = Maps.newHashMap();
+
+    private class IndexerFileVisitor extends SimpleFileVisitor<Path>
+    {
+        @Override
+        public FileVisitResult visitFile(Path path, BasicFileAttributes basicFileAttributes)
+        {
+            final PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher("glob:**.smali");
+            if (fileMatcher.matches(path))
+            {
+                try
+                {
+                    final SmaliHeader header = SmaliFileParser.parseSmaliHeader(path);
+                    indexMap.put(header.getClassName(), new Index(path, header.getSuperName()));
+                }
+                catch (Exception e)
+                {
+                    LOG.error("Failed indexing file: {}", path.toString());
+                    LOG.error(e);
+                }
+            }
+            return FileVisitResult.CONTINUE;
+        }
+    }
+
+    public SmaliProjectIndexer(final Path projectRootPath) throws IOException
+    {
+        this.projectRootPath = projectRootPath;
+        indexProject();
+    }
+
+    public void indexProject() throws IOException
+    {
+        LOG.info("Indexing smali project: {}", projectRootPath.toString());
+        indexMap.clear();
+        componentList.clear();
+        Files.walkFileTree(projectRootPath, new IndexerFileVisitor());
+        findComponentClasses();
+        LOG.info("Indexed {} smali files", indexMap.keySet().size());
+        LOG.info("Identified {} component classes", componentList.size());
+    }
+
+    private void findComponentClasses()
+    {
+        int lastSize;
+        final Set<String> superClasses = Sets.newHashSet(Constants.ANDROID_COMPONENTS);
+        do
+        {
+            lastSize = superClasses.size();
+            for (final String className : indexMap.keySet())
+            {
+                final Index index = indexMap.get(className);
+                if (superClasses.contains(index.getSuperClass()))
+                {
+                    superClasses.add(className);
+                    componentList.add(index.getFilePath());
+                }
+            }
+        }
+        while (superClasses.size() != lastSize);
+    }
+
+    public List<Path> getComponentList()
+    {
+        return componentList;
+    }
+
+    public Map<String, Index> getIndexMap()
+    {
+        return indexMap;
+    }
+}

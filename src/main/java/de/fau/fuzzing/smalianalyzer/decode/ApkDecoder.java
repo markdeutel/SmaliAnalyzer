@@ -18,7 +18,9 @@ import org.jf.dexlib2.dexbacked.ZipDexContainer;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.util.Map;
 import java.util.Set;
 
@@ -55,6 +57,10 @@ public class ApkDecoder
     {
         try
         {
+            final PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher("glob:**.apk");
+            if (!fileMatcher.matches(apkFilePath))
+                return false;
+
             LOG.info("Decoding .apk file: {}", apkFilePath.toString());
 
             // set baksmali options

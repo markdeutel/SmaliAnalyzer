@@ -1,112 +1,123 @@
 package de.fau.fuzzing.smalianalyzer;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.SetMultimap;
 import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
-import de.fau.fuzzing.smalianalyzer.parse.SmaliFileVisitor;
-import de.fau.fuzzing.smalianalyzer.parse.SmaliParser;
+import de.fau.fuzzing.smalianalyzer.parse.Constants;
+import de.fau.fuzzing.smalianalyzer.parse.SmaliFileParser;
+import de.fau.fuzzing.smalianalyzer.parse.SmaliProjectIndexer;
 import de.fau.fuzzing.smalianalyzer.serialize.JsonWriter;
-import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
+import java.util.Collection;
 import java.util.Map;
-import java.util.Set;
 
 public class SmaliAnalyzer
 {
-    private static final Logger LOG = LogManager.getLogger(SmaliAnalyzer.class.getName());
+    private static final Logger LOG = LogManager.getLogger();
 
-    private static final String DEFAULT_OUTPUT_PATH = "./";
-    private static final String USAGE_STRING = "smalianalyzer [OPTIONS] <FILE>";
-
-    public static void main(String[] args) throws ParseException
+    private static class ParsingResult
     {
-        final Options options = new Options();
-        options.addOption("h", "Print this dialog");
-        options.addOption("o", true, "Specify the output folder.");
-
-        final CommandLineParser parser = new DefaultParser();
-        final CommandLine commandLine = parser.parse(options, args);
-
-        Path outputPath = Paths.get(DEFAULT_OUTPUT_PATH);
-        if (commandLine.hasOption("o"))
+        private ParsingResult(Map<String, Collection<String>> intentInvocations, Map<String, Collection<String>> bundleInvocations)
         {
-            outputPath = Paths.get(commandLine.getOptionValue("o"));
+            this.intentInvocations = intentInvocations;
+            this.bundleInvocations = bundleInvocations;
         }
-        else if (commandLine.hasOption("h"))
+
+        Map<String, Collection<String>> intentInvocations;
+        Map<String, Collection<String>> bundleInvocations;
+    }
+
+    public static void main(final String[] args)
+    {
+        if (args.length < 2)
         {
-            printHelp(options);
+            LOG.info("Use like this: SmaliAnalyzer <SOURCE FILE/FOLDER> <OUTPUT FILE/FOLDER>");
             return;
         }
 
-        args = commandLine.getArgs();
-        if (args.length >= 1)
+        final Path sourcePath = Paths.get(args[0]);
+        final Path outputPath = Paths.get(args[1]);
+        if (Files.isRegularFile(sourcePath, LinkOption.NOFOLLOW_LINKS) &&
+                Files.isRegularFile(outputPath, LinkOption.NOFOLLOW_LINKS))
         {
-            final Path sourcePath = Paths.get(args[0]);
-            if (Files.isDirectory(sourcePath))
-            {
-                decodeApks(sourcePath, outputPath);
-            }
-            else if (Files.isRegularFile(sourcePath))
-            {
-                decodeApk(sourcePath, outputPath);
-            }
+            analyzeApk(sourcePath, outputPath);
         }
-        else
+        else if (Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS) &&
+                Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS))
         {
-            printHelp(options);
+            analyzeApkFolder(sourcePath, outputPath);
         }
     }
 
-    private static void decodeApk(final Path sourcePath, final Path outputPath)
-    {
-        Path rootPath = Paths.get("./tmp");
-        if (ApkDecoder.decode(sourcePath, rootPath))
-        {
-            final Map<String, ApkDecoder.IntentFilter> actionsResult = ApkDecoder.decodeManifest(sourcePath);
-            if (actionsResult != null)
-                JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".meta")), actionsResult);
-
-            final Set<String> components = SmaliFileVisitor.searchFileTreeForComponents(rootPath);
-            if (components != null)
-            {
-                final SmaliFileVisitor.InvocationCallers invocationCallers =
-                        SmaliFileVisitor.searchFileTreeForInvocationCallers(rootPath, components);
-                if (invocationCallers != null)
-                {
-                    final Map<String, SmaliParser.Component> result = SmaliParser.parseComponents(rootPath, components, invocationCallers);
-                    if (result != null)
-                        JsonWriter.writeToFile(outputPath.resolve(sourcePath.getFileName().toString().replaceAll(".apk", ".json")), result);
-                }
-            }
-
-            // cleanup before exiting
-            ApkDecoder.deleteTemporaryFiles(rootPath);
-        }
-    }
-
-    private static void decodeApks(final Path sourcePath, final Path outputPath)
+    private static void analyzeApkFolder(final Path sourcePath, final Path outputPath)
     {
         try (final DirectoryStream<Path> directoryStream = Files.newDirectoryStream(sourcePath, "*.apk"))
         {
             for (final Path apkFile : directoryStream)
             {
-                decodeApk(apkFile, outputPath);
+                final Path outputFilePath = outputPath.resolve(apkFile.getFileName().toString().replaceAll(".apk", ".json"));
+                analyzeApk(apkFile, outputFilePath);
             }
         }
         catch (IOException e)
         {
-            LOG.error("Failed parsing directory: " + sourcePath.toString(), e);
+            LOG.error("Failed parsing directory: " + sourcePath.toString());
+            LOG.error(e);
         }
     }
 
-    private static void printHelp(final Options options)
+    private static void analyzeApk(final Path sourcePath, final Path outputPath)
     {
-        HelpFormatter helpFormatter = new HelpFormatter();
-        helpFormatter.printHelp(USAGE_STRING, options);
+        final Path rootPath = Paths.get(sourcePath.toString().replaceAll(".apk", "/"));
+        if (ApkDecoder.decode(sourcePath, rootPath))
+        {
+            try
+            {
+                if (Files.notExists(outputPath.getParent(), LinkOption.NOFOLLOW_LINKS))
+                    Files.createDirectories(outputPath.getParent());
+
+                final Map<String, ApkDecoder.IntentFilter> manifestResult = ApkDecoder.decodeManifest(sourcePath);
+                if (manifestResult != null)
+                    JsonWriter.writeToFile(Paths.get(outputPath.toString().replaceAll(".json", ".meta")), manifestResult);
+
+                final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
+                final Map<String, ParsingResult> result = Maps.newHashMap();
+                for (final Path filePath : indexer.getComponentList())
+                {
+                    final String componentName = getComponentName(rootPath, filePath);
+                    final SetMultimap<String, String> intentResults = HashMultimap.create();
+                    final SetMultimap<String, String> bundleResults = HashMultimap.create();
+                    for (final String methodName : Constants.COMPONENT_ENTRY_METHODS)
+                        SmaliFileParser.parseMethod(filePath, methodName, indexer.getIndexMap(), intentResults, bundleResults, 0);
+
+                    if (!intentResults.isEmpty() || !bundleResults.isEmpty())
+                        result.put(componentName, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
+                }
+
+                JsonWriter.writeToFile(outputPath, result);
+
+            }
+            catch (Exception e)
+            {
+                LOG.error("Failed analyzing apk file: {}", sourcePath.toString());
+                LOG.error(e);
+            }
+            finally
+            {
+                ApkDecoder.deleteTemporaryFiles(rootPath);
+            }
+        }
+    }
+
+    private static String getComponentName(final Path rootPath, final Path filePath)
+    {
+        String relPathStr = rootPath.relativize(filePath).toString();
+        relPathStr = relPathStr.replaceAll("/", ".").replaceAll(".smali", "");
+        return relPathStr.substring(relPathStr.indexOf('.') + 1);
     }
 }
