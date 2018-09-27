@@ -89,7 +89,6 @@ public class SmaliAnalyzer
 
                 final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
 
-                int count = 0;
                 LOG.info("Parsing found components");
                 final Map<String, ParsingResult> result = Maps.newHashMap();
                 for (final Path filePath : indexer.getComponentList())
@@ -105,7 +104,6 @@ public class SmaliAnalyzer
 
                     if (!intentResults.isEmpty() || !bundleResults.isEmpty())
                         result.put(componentName, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
-                    count++;
                 }
 
                 JsonWriter.writeToFile(outputPath, result);
@@ -125,8 +123,7 @@ public class SmaliAnalyzer
 
     private static String getComponentName(final Path rootPath, final Path filePath)
     {
-        String relPathStr = rootPath.relativize(filePath).toString();
-        relPathStr = relPathStr.replaceAll("/", ".").replaceAll(".smali", "");
-        return relPathStr.substring(relPathStr.indexOf('.') + 1);
+        String relPathStr = rootPath.toAbsolutePath().relativize(filePath.toAbsolutePath()).toString();
+        return relPathStr.replaceAll("/", ".").replaceAll(".smali", "");
     }
 }
