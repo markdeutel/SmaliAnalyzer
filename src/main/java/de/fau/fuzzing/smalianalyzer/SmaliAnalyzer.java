@@ -84,10 +84,12 @@ public class SmaliAnalyzer
                 if (Files.notExists(outputPath.getParent(), LinkOption.NOFOLLOW_LINKS))
                     Files.createDirectories(outputPath.getParent());
 
+                System.out.println("Parsing application manifest");
                 final Map<String, ApkDecoder.IntentFilter> manifestResult = ApkDecoder.decodeManifest(sourcePath);
                 if (manifestResult != null)
                     JsonWriter.writeToFile(Paths.get(outputPath.toString().replaceAll(".json", ".meta")), manifestResult);
 
+                System.out.println("Indexing smali code");
                 final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
 
                 int count = 0;
