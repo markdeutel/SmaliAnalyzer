@@ -76,6 +76,7 @@ public class SmaliAnalyzer
     private static void analyzeApk(final Path sourcePath, final Path outputPath)
     {
         final Path rootPath = Paths.get(sourcePath.toString().replaceAll(".apk", "/"));
+        System.out.println(String.format("Decoding apk file: %s", sourcePath.toString()));
         if (ApkDecoder.decode(sourcePath, rootPath))
         {
             try
@@ -89,10 +90,12 @@ public class SmaliAnalyzer
 
                 final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
 
-                LOG.info("Parsing found components");
+                int count = 0;
+                System.out.println("Parsing found components");
                 final Map<String, ParsingResult> result = Maps.newHashMap();
                 for (final Path filePath : indexer.getComponentList())
                 {
+                    System.out.print(buildProgressBar(count, indexer.getComponentList().size(), 60));
                     final String componentName = getComponentName(rootPath, filePath);
                     final SetMultimap<String, String> intentResults = HashMultimap.create();
                     final SetMultimap<String, String> bundleResults = HashMultimap.create();
@@ -104,8 +107,12 @@ public class SmaliAnalyzer
 
                     if (!intentResults.isEmpty() || !bundleResults.isEmpty())
                         result.put(componentName, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
+
+                    count++;
                 }
 
+                System.out.print(clearProgressBar(60));
+                System.out.println(String.format("Writing result to file: %s", outputPath.toString()));
                 JsonWriter.writeToFile(outputPath, result);
 
             }
@@ -125,5 +132,30 @@ public class SmaliAnalyzer
     {
         String relPathStr = rootPath.toAbsolutePath().relativize(filePath.toAbsolutePath()).toString();
         return relPathStr.replaceAll("/", ".").replaceAll(".smali", "");
+    }
+
+    private static String buildProgressBar(int curr, int max, int len)
+    {
+        float step = (float) len / max;
+        int prog = Math.round(curr * step);
+
+        final StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < prog - 1; ++i)
+            sb.append("=");
+        sb.append(">");
+        for (int i = prog; i < len; ++i)
+            sb.append(" ");
+        sb.append("] ").append(curr).append("/").append(max).append("\r");
+
+        return sb.toString();
+    }
+
+    private static String clearProgressBar(int len)
+    {
+        final StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < len + 20; ++i)
+            sb.append(" ");
+        return sb.append("\r").toString();
     }
 }
