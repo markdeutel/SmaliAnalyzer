@@ -39,4 +39,5 @@ public class Constants
 
     public static final String INTENT_CLASS = "Landroid/content/Intent;";
     public static final String BUNDLE_CLASS = "Landroid/os/Bundle;";
+    public static final String PARCABLE_CLASS = "Landroid/os/Parcelable;";
 }

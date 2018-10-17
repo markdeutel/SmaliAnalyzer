@@ -1,9 +1,13 @@
 package de.fau.fuzzing.smalianalyzer.parse;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SmaliHeader
 {
     private String className = null;
     private String superName = null;
+    private List<String> implementedClasses = new ArrayList<>();
 
     public String getClassName()
     {
@@ -23,5 +27,13 @@ public class SmaliHeader
     public void setSuperName(String superName)
     {
         this.superName = superName;
+    }
+
+    public List<String> getImplementedClasses() {
+        return implementedClasses;
+    }
+
+    public void addImplementedClass(final String implementedClass) {
+        implementedClasses.add(implementedClass);
     }
 }

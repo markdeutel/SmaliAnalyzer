@@ -1,16 +1,20 @@
 package de.fau.fuzzing.smalianalyzer.parse;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Index
 {
     private Path filePath;
     private String superClass;
+    private List<String> implementedClasses = new ArrayList<>();
 
-    public Index(Path filePath, String superClass)
+    public Index(Path filePath, SmaliHeader header)
     {
         this.filePath = filePath;
-        this.superClass = superClass;
+        this.superClass = header.getSuperName();
+        this.implementedClasses = header.getImplementedClasses();
     }
 
     public Path getFilePath()
@@ -31,5 +35,15 @@ public class Index
     public void setSuperClass(String superClass)
     {
         this.superClass = superClass;
+    }
+
+    public List<String> getImplementedClasses()
+    {
+        return implementedClasses;
+    }
+
+    public void setImplementedClasses(List<String> implementedClasses)
+    {
+        this.implementedClasses = implementedClasses;
     }
 }

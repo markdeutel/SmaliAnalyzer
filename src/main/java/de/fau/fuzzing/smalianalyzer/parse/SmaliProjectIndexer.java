@@ -19,6 +19,7 @@ public class SmaliProjectIndexer
 
     private final Path projectRootPath;
     private final List<Path> componentList = Lists.newArrayList();
+    private final List<Path> parcableList = Lists.newArrayList();
     private final Map<String, Index> indexMap = Maps.newHashMap();
 
     private class IndexerFileVisitor extends SimpleFileVisitor<Path>
@@ -32,7 +33,7 @@ public class SmaliProjectIndexer
                 try
                 {
                     final SmaliHeader header = SmaliFileParser.parseSmaliHeader(path);
-                    indexMap.put(header.getClassName(), new Index(path, header.getSuperName()));
+                    indexMap.put(header.getClassName(), new Index(path, header));
                 }
                 catch (Exception e)
                 {
@@ -57,8 +58,10 @@ public class SmaliProjectIndexer
         componentList.clear();
         Files.walkFileTree(projectRootPath, new IndexerFileVisitor());
         findComponentClasses();
+        findParcableClasses();
         LOG.info("Indexed {} smali files", indexMap.keySet().size());
         LOG.info("Identified {} component classes", componentList.size());
+        LOG.info("Identified {} parcable classes", componentList.size());
     }
 
     private void findComponentClasses()
@@ -81,9 +84,26 @@ public class SmaliProjectIndexer
         while (superClasses.size() != lastSize);
     }
 
+    private void findParcableClasses()
+    {
+        for (final String className : indexMap.keySet())
+        {
+            final Index index = indexMap.get(className);
+            if (index.getImplementedClasses().contains(Constants.PARCABLE_CLASS))
+            {
+                parcableList.add(index.getFilePath());
+            }
+        }
+    }
+
     public List<Path> getComponentList()
     {
         return componentList;
+    }
+
+    public List<Path> getParcableList()
+    {
+        return parcableList;
     }
 
     public Map<String, Index> getIndexMap()

@@ -28,13 +28,17 @@ public class SmaliFileParser
             while ((line = reader.readLine()) != null)
             {
                 line = line.trim();
+                if (line.isEmpty())
+                    continue;
+                if (line.equals("# direct methods") || line.equals("# static fields") || line.equals("# annotations"))
+                    break;
+
                 if (line.startsWith(".class"))
                     header.setClassName(line.substring(line.lastIndexOf(' ')).trim());
                 else if (line.startsWith(".super"))
                     header.setSuperName(line.substring(line.lastIndexOf(' ')).trim());
-
-                if (header.getClassName() != null && header.getSuperName() != null)
-                    break;
+                else if (line.startsWith(".implements"))
+                    header.addImplementedClass(line.substring(line.lastIndexOf(' ')).trim());
             }
 
             if (header.getClassName() == null || header.getSuperName() == null)
