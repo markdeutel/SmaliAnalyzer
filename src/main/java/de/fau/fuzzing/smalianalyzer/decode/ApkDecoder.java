@@ -1,6 +1,8 @@
 package de.fau.fuzzing.smalianalyzer.decode;
 
-import com.google.common.collect.*;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -153,7 +155,7 @@ public class ApkDecoder
 
                         line = line.trim();
                         String dataTag = getDataTag(line);
-                        switch(dataTag)
+                        switch (dataTag)
                         {
                             case "activity":
                             case "service":

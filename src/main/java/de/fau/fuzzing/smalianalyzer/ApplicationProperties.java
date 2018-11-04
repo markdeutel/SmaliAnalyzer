@@ -45,5 +45,8 @@ public class ApplicationProperties
         return aaptPath;
     }
 
-    public int getMaxDepth() { return maxDepth; }
+    public int getMaxDepth()
+    {
+        return maxDepth;
+    }
 }

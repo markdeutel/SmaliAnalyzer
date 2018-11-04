@@ -29,11 +29,13 @@ public class SmaliHeader
         this.superName = superName;
     }
 
-    public List<String> getImplementedClasses() {
+    public List<String> getImplementedClasses()
+    {
         return implementedClasses;
     }
 
-    public void addImplementedClass(final String implementedClass) {
+    public void addImplementedClass(final String implementedClass)
+    {
         implementedClasses.add(implementedClass);
     }
 }
