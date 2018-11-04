@@ -12,6 +12,7 @@ public class ApplicationProperties
     private static final String PROPERTIES_PATH = "application.properties";
 
     private String aaptPath = null;
+    private String radamsaPath = null;
     private int maxDepth = 0;
 
     private static ApplicationProperties instance;
@@ -22,7 +23,8 @@ public class ApplicationProperties
         {
             final Properties properties = new Properties();
             properties.load(ClassLoader.getSystemClassLoader().getResourceAsStream(PROPERTIES_PATH));
-            aaptPath = properties.getProperty("android.sdk.aapt.path", "");
+            aaptPath = properties.getProperty("tools.android.sdk.aapt.path", ".");
+            radamsaPath = properties.getProperty("tools.radamsa.path", ".");
             maxDepth = Integer.parseInt(properties.getProperty("constants.max.depth", "0"));
         }
         catch (IOException e)
@@ -44,6 +46,8 @@ public class ApplicationProperties
     {
         return aaptPath;
     }
+
+    public String getRadamsaPath() { return radamsaPath; }
 
     public int getMaxDepth()
     {

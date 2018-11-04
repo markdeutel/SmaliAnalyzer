@@ -60,139 +60,118 @@ public class ApkDecoder
         }
     }
 
-    public static boolean decode(final Path apkFilePath, final Path outputFilePath)
+    public static void decode(final Path apkFilePath, final Path outputFilePath) throws IOException
     {
-        try
+        final PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher("glob:**.apk");
+        if (!fileMatcher.matches(apkFilePath))
+            throw new IllegalArgumentException(String.format("Specified file is not an APK file %s", apkFilePath.toString()));
+
+        LOG.info("Decoding .apk file: {}", apkFilePath.toString());
+
+        // set baksmali options
+        final BaksmaliOptions options = new BaksmaliOptions();
+        options.deodex = false;
+        options.implicitReferences = false;
+        options.parameterRegisters = true;
+        options.localsDirective = true;
+        options.sequentialLabels = true;
+        options.debugInfo = false;
+        options.codeOffsets = false;
+        options.accessorComments = false;
+        options.registerInfo = 0;
+        options.inlineResolver = null;
+
+        // query the number of available processors
+        int jobs = Runtime.getRuntime().availableProcessors();
+
+        // decode the dex file
+        final ZipDexContainer dexContainer = (ZipDexContainer) DexFileFactory.loadDexContainer(apkFilePath.toFile(), Opcodes.getDefault());
+        for (final String entryName : dexContainer.getDexEntryNames())
         {
-            final PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher("glob:**.apk");
-            if (!fileMatcher.matches(apkFilePath))
-                return false;
+            LOG.info("Found .dex entry: {}", entryName);
+            final DexBackedDexFile dexFile = DexFileFactory.loadDexEntry(apkFilePath.toFile(), entryName, true, Opcodes.getDefault());
+            if (dexFile.isOdexFile())
+                throw new IllegalStateException("Can not disassemble .odex file without deodexing it.");
 
-            LOG.info("Decoding .apk file: {}", apkFilePath.toString());
-
-            // set baksmali options
-            final BaksmaliOptions options = new BaksmaliOptions();
-            options.deodex = false;
-            options.implicitReferences = false;
-            options.parameterRegisters = true;
-            options.localsDirective = true;
-            options.sequentialLabels = true;
-            options.debugInfo = false;
-            options.codeOffsets = false;
-            options.accessorComments = false;
-            options.registerInfo = 0;
-            options.inlineResolver = null;
-
-            // query the number of available processors
-            int jobs = Runtime.getRuntime().availableProcessors();
-
-            // decode the dex file
-            final ZipDexContainer dexContainer = (ZipDexContainer) DexFileFactory.loadDexContainer(apkFilePath.toFile(), Opcodes.getDefault());
-            for (final String entryName : dexContainer.getDexEntryNames())
-            {
-                LOG.info("Found .dex entry: {}", entryName);
-                final DexBackedDexFile dexFile = DexFileFactory.loadDexEntry(apkFilePath.toFile(), entryName, true, Opcodes.getDefault());
-                if (dexFile.isOdexFile())
-                {
-                    LOG.error("Can not disassemble .odex file without deodexing it.");
-                    return false;
-                }
-
-                Baksmali.disassembleDexFile(dexFile, outputFilePath.toFile(), jobs, options);
-            }
-
-            return true;
-        }
-        catch (Exception e)
-        {
-            LOG.error("Failed decoding apk file:", e);
-            return false;
+            Baksmali.disassembleDexFile(dexFile, outputFilePath.toFile(), jobs, options);
         }
     }
 
-    public static Map<String, IntentFilters> decodeManifest(final Path apkFilePath)
+    public static Map<String, IntentFilters> decodeManifest(final Path apkFilePath) throws IOException
     {
-        try
+        LOG.info("Decoding AndroidManifest.xml file");
+        final Map<String, IntentFilters> result = Maps.newHashMap();
+        final String[] cmd = {ApplicationProperties.getInstance().getAAPTPath(), "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
+        final Process process = Runtime.getRuntime().exec(cmd);
+        try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
         {
-            LOG.info("Decoding AndroidManifest.xml file");
-            final Map<String, IntentFilters> result = Maps.newHashMap();
-            final String[] cmd = {ApplicationProperties.getInstance().getAAPTPath(), "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
-            final Process process = Runtime.getRuntime().exec(cmd);
-            try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
+            try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
             {
-                try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
+                IntentFilters filters = null;
+                String line, componentName = "";
+                boolean dataMode = false;
+                while ((line = inputReader.readLine()) != null)
                 {
-                    IntentFilters filters = null;
-                    String line, componentName = "";
-                    boolean dataMode = false;
-                    while ((line = inputReader.readLine()) != null)
+                    if (dataMode)
                     {
-                        if (dataMode)
-                        {
 
-                            List<String> names = Lists.newArrayList("android:scheme", "android:host",
-                                    "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
-                            Map<String, String> dataValues = Maps.newHashMap();
-                            while ((line = inputReader.readLine()) != null)
+                        List<String> names = Lists.newArrayList("android:scheme", "android:host",
+                                "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
+                        Map<String, String> dataValues = Maps.newHashMap();
+                        while ((line = inputReader.readLine()) != null)
+                        {
+                            line = line.trim();
+                            if (!line.startsWith("A: "))
+                                break;
+
+                            final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
+                            if (matcher.find())
                             {
-                                line = line.trim();
-                                if (!line.startsWith("A: "))
-                                    break;
-
-                                final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
-                                if (matcher.find())
-                                {
-                                    String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
-                                    String value = line.substring(line.indexOf('"') + 1);
-                                    dataValues.put(name, value.substring(0, value.indexOf('"')));
-                                }
+                                String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
+                                String value = line.substring(line.indexOf('"') + 1);
+                                dataValues.put(name, value.substring(0, value.indexOf('"')));
                             }
-
-                            final String dataString = buildDataURI(dataValues);
-                            filters.data.add(dataString);
-                            dataMode = false;
                         }
 
-                        line = line.trim();
-                        String dataTag = getDataTag(line);
-                        switch (dataTag)
-                        {
-                            case "activity":
-                            case "service":
-                            case "receiver":
-                                if (filters != null && !filters.isEmpty())
-                                    result.put(componentName, filters);
-                                filters = new IntentFilters();
-                                componentName = getAttributeValue(inputReader, line, "android:name");
-                                break;
-                            case "action":
-                                filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
-                                break;
-                            case "category":
-                                filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
-                                break;
-                            case "data":
-                                dataMode = true;
-                                break;
-                        }
+                        final String dataString = buildDataURI(dataValues);
+                        filters.data.add(dataString);
+                        dataMode = false;
                     }
 
-                    if (filters != null && !filters.isEmpty())
-                        result.put(componentName, filters);
-
-                    while ((line = errorReader.readLine()) != null)
+                    line = line.trim();
+                    String dataTag = getDataTag(line);
+                    switch (dataTag)
                     {
-                        LOG.error(line);
+                        case "activity":
+                        case "service":
+                        case "receiver":
+                            if (filters != null && !filters.isEmpty())
+                                result.put(componentName, filters);
+                            filters = new IntentFilters();
+                            componentName = getAttributeValue(inputReader, line, "android:name");
+                            break;
+                        case "action":
+                            filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
+                            break;
+                        case "category":
+                            filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
+                            break;
+                        case "data":
+                            dataMode = true;
+                            break;
                     }
-
-                    return result;
                 }
+
+                if (filters != null && !filters.isEmpty())
+                    result.put(componentName, filters);
+
+                while ((line = errorReader.readLine()) != null)
+                {
+                    LOG.error(line);
+                }
+
+                return result;
             }
-        }
-        catch (IOException e)
-        {
-            LOG.error("Failed decoding manifest file:", e);
-            return null;
         }
     }
 

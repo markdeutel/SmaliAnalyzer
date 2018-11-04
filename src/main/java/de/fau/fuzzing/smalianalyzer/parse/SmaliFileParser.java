@@ -115,7 +115,8 @@ public class SmaliFileParser
                             final String register = line.substring(line.indexOf(' ') + 1, line.indexOf(','));
                             final String value = line.substring(line.indexOf('\"') + 1, line.lastIndexOf('\"'));
                             registerMap.put(register, value);
-                            stringSet.add(value);
+                            if (value.trim().length() > 1)
+                                stringSet.add(value.trim());
                         }
                     }
                 }
