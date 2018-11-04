@@ -6,7 +6,7 @@ plugins {
 }
 
 group 'de.fau.fuzzing'
-version '2.1'
+version '2.2'
 
 sourceCompatibility = 1.8
 

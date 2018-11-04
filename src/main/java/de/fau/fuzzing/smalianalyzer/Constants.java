@@ -1,4 +1,4 @@
-package de.fau.fuzzing.smalianalyzer.parse;
+package de.fau.fuzzing.smalianalyzer;
 
 import com.google.common.collect.Sets;
 
@@ -6,7 +6,6 @@ import java.util.Set;
 
 public class Constants
 {
-    public static final int MAX_DEPTH = 2;
     public static final Set<String> ANDROID_COMPONENTS = Sets.newHashSet(
             // activities
             "Landroid/app/Activity;",

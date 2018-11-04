@@ -3,6 +3,7 @@ package de.fau.fuzzing.smalianalyzer.parse;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import de.fau.fuzzing.smalianalyzer.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -20,7 +21,7 @@ public class SmaliProjectIndexer
     private final Path projectRootPath;
     private final List<Path> componentList = Lists.newArrayList();
     private final List<Path> parcableList = Lists.newArrayList();
-    private final Map<String, Index> indexMap = Maps.newHashMap();
+    private final Map<String, IndexEntry> indexMap = Maps.newHashMap();
 
     private class IndexerFileVisitor extends SimpleFileVisitor<Path>
     {
@@ -33,7 +34,7 @@ public class SmaliProjectIndexer
                 try
                 {
                     final SmaliHeader header = SmaliFileParser.parseSmaliHeader(path);
-                    indexMap.put(header.getClassName(), new Index(path, header));
+                    indexMap.put(header.getClassName(), new IndexEntry(path, header));
                 }
                 catch (Exception e)
                 {
@@ -48,7 +49,6 @@ public class SmaliProjectIndexer
     public SmaliProjectIndexer(final Path projectRootPath) throws IOException
     {
         this.projectRootPath = projectRootPath;
-        indexProject();
     }
 
     public void indexProject() throws IOException
@@ -73,7 +73,7 @@ public class SmaliProjectIndexer
             lastSize = superClasses.size();
             for (final String className : indexMap.keySet())
             {
-                final Index index = indexMap.get(className);
+                final IndexEntry index = indexMap.get(className);
                 if (superClasses.contains(index.getSuperClass()))
                 {
                     superClasses.add(className);
@@ -88,7 +88,7 @@ public class SmaliProjectIndexer
     {
         for (final String className : indexMap.keySet())
         {
-            final Index index = indexMap.get(className);
+            final IndexEntry index = indexMap.get(className);
             if (index.getImplementedClasses().contains(Constants.PARCABLE_CLASS))
             {
                 parcableList.add(index.getFilePath());
@@ -106,7 +106,7 @@ public class SmaliProjectIndexer
         return parcableList;
     }
 
-    public Map<String, Index> getIndexMap()
+    public Map<String, IndexEntry> getIndexMap()
     {
         return indexMap;
     }

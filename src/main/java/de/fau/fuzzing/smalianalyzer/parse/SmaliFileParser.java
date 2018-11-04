@@ -2,6 +2,8 @@ package de.fau.fuzzing.smalianalyzer.parse;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.SetMultimap;
+import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
+import de.fau.fuzzing.smalianalyzer.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -10,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 public class SmaliFileParser
@@ -47,8 +50,9 @@ public class SmaliFileParser
         }
     }
 
-    public static void parseMethod(final Path filePath, final String methodName, final Map<String, Index> indexMap, final Map<String, String> registerMap,
-                                   final SetMultimap<String, String> intentResultMap, final SetMultimap<String, String> bundleResultMap, int depth) throws IOException
+    public static void parseMethod(final Path filePath, final String methodName, final Map<String, IndexEntry> indexMap, final Map<String, String> registerMap,
+                                   final SetMultimap<String, String> intentResultMap, final SetMultimap<String, String> bundleResultMap,
+                                   final Set<String> stringSet, int depth) throws IOException
     {
         try (BufferedReader reader = Files.newBufferedReader(filePath))
         {
@@ -63,7 +67,7 @@ public class SmaliFileParser
                     while ((line = reader.readLine()) != null)
                     {
                         line = line.trim();
-                        if (line.matches(INVOKE_METHOD))
+                        if (line.matches(INVOKE_METHOD)) // handles method invocation
                         {
                             final String caller = line.substring(line.lastIndexOf(", ") + 2, line.indexOf("->"));
                             final String name = line.substring(line.indexOf("->") + 2, line.lastIndexOf('('));
@@ -82,14 +86,14 @@ public class SmaliFileParser
                             {
                                 if (registers.length > 1)
                                 {
-                                    final String value = registerMap.getOrDefault(registers[1], null);
+                                    final String value = registerMap.get(registers[1]);
                                     if (value != null)
                                         bundleResultMap.put(name, value);
                                 }
                             }
-                            else if (indexMap.get(caller) != null && depth < Constants.MAX_DEPTH)
+                            else if (indexMap.get(caller) != null && depth < ApplicationProperties.getInstance().getMaxDepth())
                             {
-                                final Index index = indexMap.get(caller);
+                                final IndexEntry index = indexMap.get(caller);
                                 final String fullName = line.substring(line.indexOf("->") + 2);
 
                                 int paramCount = 0;
@@ -103,15 +107,15 @@ public class SmaliFileParser
                                     paramCount++;
                                 }
 
-                                parseMethod(index.getFilePath(), fullName, indexMap, subRegisterMap, intentResultMap, bundleResultMap, depth + 1);
-
+                                parseMethod(index.getFilePath(), fullName, indexMap, subRegisterMap, intentResultMap, bundleResultMap, stringSet, depth + 1);
                             }
                         }
-                        else if (line.matches(SET_CONST_STRING))
+                        else if (line.matches(SET_CONST_STRING)) // handles constants strings
                         {
                             final String register = line.substring(line.indexOf(' ') + 1, line.indexOf(','));
                             final String value = line.substring(line.indexOf('\"') + 1, line.lastIndexOf('\"'));
                             registerMap.put(register, value);
+                            stringSet.add(value);
                         }
                     }
                 }

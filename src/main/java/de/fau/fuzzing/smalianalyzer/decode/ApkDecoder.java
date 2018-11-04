@@ -1,9 +1,6 @@
 package de.fau.fuzzing.smalianalyzer.decode;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.SetMultimap;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -21,8 +18,11 @@ import java.io.InputStreamReader;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author Mark Deutel
@@ -31,11 +31,16 @@ public class ApkDecoder
 {
     private static final Logger LOG = LogManager.getLogger(ApkDecoder.class.getName());
 
-    public static class IntentFilter
+    public static class IntentFilters
     {
         private Set<String> actions = Sets.newHashSet();
         private Set<String> categories = Sets.newHashSet();
         private Set<String> data = Sets.newHashSet();
+
+        public boolean isEmpty()
+        {
+            return actions.isEmpty() && categories.isEmpty() && data.isEmpty();
+        }
 
         public Set<String> getActions()
         {
@@ -80,7 +85,7 @@ public class ApkDecoder
             int jobs = Runtime.getRuntime().availableProcessors();
 
             // decode the dex file
-            ZipDexContainer dexContainer = (ZipDexContainer) DexFileFactory.loadDexContainer(apkFilePath.toFile(), Opcodes.getDefault());
+            final ZipDexContainer dexContainer = (ZipDexContainer) DexFileFactory.loadDexContainer(apkFilePath.toFile(), Opcodes.getDefault());
             for (final String entryName : dexContainer.getDexEntryNames())
             {
                 LOG.info("Found .dex entry: {}", entryName);
@@ -103,116 +108,75 @@ public class ApkDecoder
         }
     }
 
-    public static Map<String, IntentFilter> decodeManifest(final Path apkFilePath)
+    public static Map<String, IntentFilters> decodeManifest(final Path apkFilePath)
     {
         try
         {
             LOG.info("Decoding AndroidManifest.xml file");
-
-            final Map<String, IntentFilter> result = Maps.newHashMap();
+            final Map<String, IntentFilters> result = Maps.newHashMap();
             final String[] cmd = {ApplicationProperties.getInstance().getAAPTPath(), "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
             final Process process = Runtime.getRuntime().exec(cmd);
             try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
             {
                 try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
                 {
-                    boolean dataTag = false;
+                    IntentFilters filters = null;
                     String line, componentName = "";
-                    SetMultimap<String, String> dataMap = null;
-                    String scheme = "%s", host = "%s", port = "%s", path = "%s", pathPrefix = null, pathPattern = null;
+                    boolean dataMode = false;
                     while ((line = inputReader.readLine()) != null)
                     {
-                        line = line.trim();
-
-                        // read data tag
-                        if (dataTag)
+                        if (dataMode)
                         {
-                            if (line.startsWith("A: android:scheme"))
-                            {
-                                scheme = unpackLine(line, scheme);
-                                continue;
-                            }
-                            else if (line.startsWith("android:host"))
-                            {
-                                host = unpackLine(line, host);
-                                continue;
-                            }
-                            else if (line.startsWith("A: android:port"))
-                            {
-                                port = unpackLine(line, port);
-                                continue;
-                            }
-                            else if (line.startsWith("A: android:path"))
-                            {
-                                path = unpackLine(line, path);
-                                continue;
-                            }
-                            else if (line.startsWith("A: android:pathPrefix"))
-                            {
-                                pathPrefix = unpackLine(line, pathPrefix);
-                                continue;
-                            }
-                            else if (line.startsWith("A: android:pathPattern"))
-                            {
-                                pathPattern = unpackLine(line, pathPattern);
-                                continue;
-                            }
 
-                            // <scheme>://<host>:<port>[<path>|<pathPrefix>|<pathPattern>]
-                            final StringBuilder sb = new StringBuilder();
-                            sb.append(scheme).append("://").append(host).append(":").append(port).append(path);
-                            if (pathPrefix != null || pathPattern != null)
-                            {
-                                if (pathPrefix == null)
-                                    sb.append(pathPrefix);
-                                else
-                                    sb.append(pathPattern);
-                            }
-
-                            final String dataString = sb.toString().replaceAll("\\.", "").replaceAll("\\*", "%s");
-                            dataMap.put("data", dataString);
-                            dataTag = false;
-                        }
-
-                        // read all other tags
-                        if (line.startsWith("E: activity") || line.startsWith("E: service") || line.startsWith("E: receiver"))
-                        {
-                            if (dataMap != null)
-                            {
-                                final IntentFilter intentFilter = new IntentFilter();
-                                intentFilter.actions.addAll(dataMap.get("actions"));
-                                intentFilter.categories.addAll(dataMap.get("categories"));
-                                intentFilter.data.addAll(dataMap.get("data"));
-                                if (intentFilter.actions.size() > 0 || intentFilter.categories.size() > 0 ||
-                                        intentFilter.data.size() > 0)
-                                    result.put(componentName, intentFilter);
-                            }
-
-                            dataMap = HashMultimap.create();
+                            List<String> names = Lists.newArrayList("android:scheme", "android:host",
+                                    "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
+                            Map<String, String> dataValues = Maps.newHashMap();
                             while ((line = inputReader.readLine()) != null)
                             {
                                 line = line.trim();
-                                if (line.startsWith("A: android:name"))
-                                {
-                                    componentName = line.substring(line.indexOf('"') + 1);
-                                    componentName = componentName.substring(0, componentName.indexOf('"'));
+                                if (!line.startsWith("A: "))
                                     break;
+
+                                final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
+                                if (matcher.find())
+                                {
+                                    String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
+                                    String value = line.substring(line.indexOf('"') + 1);
+                                    dataValues.put(name, value.substring(0, value.indexOf('"')));
                                 }
                             }
+
+                            final String dataString = buildDataURI(dataValues);
+                            filters.data.add(dataString);
+                            dataMode = false;
                         }
-                        else if (line.startsWith("E: action"))
+
+                        line = line.trim();
+                        String dataTag = getDataTag(line);
+                        switch(dataTag)
                         {
-                            dataMap.put("actions", unpackLine(inputReader.readLine()));
-                        }
-                        else if (line.startsWith("E: category"))
-                        {
-                            dataMap.put("categories", unpackLine(inputReader.readLine()));
-                        }
-                        else if (line.startsWith("E: data"))
-                        {
-                            dataTag = true;
+                            case "activity":
+                            case "service":
+                            case "receiver":
+                                if (filters != null && !filters.isEmpty())
+                                    result.put(componentName, filters);
+                                filters = new IntentFilters();
+                                componentName = getAttributeValue(inputReader, line, "android:name");
+                                break;
+                            case "action":
+                                filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
+                                break;
+                            case "category":
+                                filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
+                                break;
+                            case "data":
+                                dataMode = true;
+                                break;
                         }
                     }
+
+                    if (filters != null && !filters.isEmpty())
+                        result.put(componentName, filters);
 
                     while ((line = errorReader.readLine()) != null)
                     {
@@ -230,22 +194,40 @@ public class ApkDecoder
         }
     }
 
-    private static String unpackLine(final String line)
+    private static String getDataTag(final String line)
     {
-        return unpackLine(line, "");
+        final Matcher matcher = Pattern.compile("E: .* \\(line=\\d+\\)").matcher(line);
+        if (matcher.find())
+            return line.split(" ")[1];
+        return "";
     }
 
-    private static String unpackLine(final String line, final String fallback)
+    private static String getAttributeValue(final BufferedReader reader, String line, final String name) throws IOException
     {
-        try
+        while ((line = reader.readLine()) != null)
         {
-            String result = line.substring(line.indexOf('"') + 1);
-            return result.substring(0, result.indexOf('"'));
+            line = line.trim();
+            if (!line.startsWith("A: "))
+                break;
+
+            final Matcher matcher = Pattern.compile("A: " + name + ".*=.* \\(Raw: .*\\)").matcher(line);
+            if (matcher.find())
+            {
+                String value = line.substring(line.indexOf('"') + 1);
+                return value.substring(0, value.indexOf('"'));
+            }
         }
-        catch (Exception e)
-        {
-            return fallback;
-        }
+        return "";
+    }
+
+    private static String buildDataURI(final Map<String, String> values)
+    {
+        // <scheme>://<host>:<port>[<path>|<pathPrefix>|<pathPattern>]
+        final StringBuilder sb = new StringBuilder();
+        sb.append(values.getOrDefault("android:scheme", "%s")).append("://").append(values.getOrDefault("android:host", "%s"))
+                .append(":").append(values.getOrDefault("android:port", "%s")).append(values.getOrDefault("android:path", "%s"))
+                .append(values.getOrDefault("android:pathPrefix", "")).append(values.getOrDefault("android:pathPattern", "."));
+        return sb.toString();
     }
 
     public static void deleteTemporaryFiles(final Path filePath)

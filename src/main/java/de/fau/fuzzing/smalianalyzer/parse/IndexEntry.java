@@ -4,13 +4,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Index
+public class IndexEntry
 {
     private Path filePath;
     private String superClass;
     private List<String> implementedClasses = new ArrayList<>();
 
-    public Index(Path filePath, SmaliHeader header)
+    public IndexEntry(Path filePath, SmaliHeader header)
     {
         this.filePath = filePath;
         this.superClass = header.getSuperName();
