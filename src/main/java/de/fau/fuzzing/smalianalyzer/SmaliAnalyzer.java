@@ -151,7 +151,7 @@ public class SmaliAnalyzer
             OutputWriter.writeToJSONFile(metaOutputPath, manifestResult);
 
             final Path stringOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".str"));
-            System.out.println(String.format("Writing string results to file: %s", stringOutputPath.toString()));
+            System.out.println(String.format("Writing STRING results to file: %s", stringOutputPath.toString()));
             OutputWriter.writeToStringFile(stringOutputPath, stringSet);
         }
         catch (Exception e)

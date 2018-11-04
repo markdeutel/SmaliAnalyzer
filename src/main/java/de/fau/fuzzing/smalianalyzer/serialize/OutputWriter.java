@@ -3,11 +3,14 @@ package de.fau.fuzzing.smalianalyzer.serialize;
 import com.google.common.collect.SetMultimap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +46,16 @@ public class OutputWriter
             {
                 writer.write(str);
                 writer.newLine();
+            }
+
+            LOG.info("Fuzzing string results");
+            final String[] cmd = {ApplicationProperties.getInstance().getRadamsaPath(), "-o", outputPath.toString(), "-r", outputPath.toString()};
+            final Process process = Runtime.getRuntime().exec(cmd);
+            try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
+            {
+                String line;
+                while((line = errorReader.readLine()) != null)
+                    System.err.println(line);
             }
         }
     }
