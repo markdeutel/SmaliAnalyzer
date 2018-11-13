@@ -8,6 +8,7 @@ import de.fau.fuzzing.smalianalyzer.decode.ApkDecoder;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliFileParser;
 import de.fau.fuzzing.smalianalyzer.parse.SmaliProjectIndexer;
 import de.fau.fuzzing.smalianalyzer.serialize.OutputWriter;
+import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,18 +35,32 @@ public class SmaliAnalyzer
         Map<String, Collection<String>> bundleInvocations;
     }
 
-    public static void main(final String[] args)
+    public static void main(final String[] args) throws ParseException
     {
-        if (args.length < 2)
+        final Options options = new Options();
+        options.addOption("h", false, "print this dialog");
+        options.addOption("f", true, "specify an input APK file or a folder containing APK files");
+        options.addOption("o", true, "specify the output folder");
+
+        final CommandLineParser parser = new DefaultParser();
+        final CommandLine cmd = parser.parse(options, args);
+
+        if (cmd.hasOption("h") || args.length == 0)
         {
-            System.out.println("Use like this: SmaliAnalyzer <SOURCE FILE/FOLDER> <OUTPUT FOLDER>");
+            HelpFormatter helpFormatter = new HelpFormatter();
+            helpFormatter.printHelp("SmaliAnalyzer", options);
             return;
         }
 
+        Path sourcePath = Paths.get(".");
+        Path outputPath = Paths.get(".");
+        if (cmd.hasOption("f"))
+            sourcePath = Paths.get(cmd.getOptionValue("f"));
+        if (cmd.hasOption("o"))
+            outputPath = Paths.get(cmd.getOptionValue("o"));
+
         long startTime = System.currentTimeMillis();
 
-        final Path sourcePath = Paths.get(args[0]);
-        final Path outputPath = Paths.get(args[1]);
         if(!Files.isDirectory(outputPath))
         {
             System.err.println("Output path has to be a directory");
@@ -54,7 +69,9 @@ public class SmaliAnalyzer
 
         if (Files.isRegularFile(sourcePath, LinkOption.NOFOLLOW_LINKS))
         {
-            analyzeApk(sourcePath, outputPath);
+            final PathMatcher fileMatcher = FileSystems.getDefault().getPathMatcher("glob:**.apk");
+            if (fileMatcher.matches(sourcePath))
+                analyzeApk(sourcePath, outputPath);
         }
         else if (Files.isDirectory(sourcePath, LinkOption.NOFOLLOW_LINKS))
         {
@@ -68,7 +85,7 @@ public class SmaliAnalyzer
 
         long stopTime = System.currentTimeMillis();
         long elapsedTime = stopTime - startTime;
-        System.out.println("Finished successful after " + TimeUnit.MILLISECONDS.toSeconds(elapsedTime) + " seconds");
+        System.out.println("Finished after " + TimeUnit.MILLISECONDS.toSeconds(elapsedTime) + " seconds");
     }
 
     private static void analyzeApkFolder(final Path sourcePath, final Path outputPath)
@@ -86,7 +103,7 @@ public class SmaliAnalyzer
         catch (IOException e)
         {
             System.err.println(String.format("Failed parsing directory: %s", sourcePath.toString()));
-            System.err.println(String.format("Reason: %s", e.getMessage()));
+            e.printStackTrace();
             LOG.error(e);
         }
     }
@@ -139,7 +156,7 @@ public class SmaliAnalyzer
             System.out.println("Tracked " + numInvocations + " invocations");
 
             // write parsing results to file
-            if (Files.notExists(outputPath.getParent(), LinkOption.NOFOLLOW_LINKS))
+            if (Files.notExists(outputPath.toAbsolutePath().getParent(), LinkOption.NOFOLLOW_LINKS))
                 Files.createDirectories(outputPath);
 
             final Path jsonOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".json"));
@@ -157,7 +174,7 @@ public class SmaliAnalyzer
         catch (Exception e)
         {
             System.err.println(String.format("Failed analyzing apk file: %s", sourcePath.toString()));
-            System.err.println(String.format("Reason: %s", e.getMessage()));
+            e.printStackTrace();
             LOG.error(e);
         }
         finally
