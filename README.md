@@ -4,8 +4,8 @@
 # Build
 Build using gradle wrapper:  
 > $: cd ~/path/to/SmaliAnalyzer  
-> $: ./gradlew build  # build sources 
-> $: ./gradlew fatJar # build standalone jar
+> $: ./gradlew build  # build sources   
+> $: ./gradlew fatJar # build standalone jar   
 
 # Options
  - *-h*: print the help dialog
