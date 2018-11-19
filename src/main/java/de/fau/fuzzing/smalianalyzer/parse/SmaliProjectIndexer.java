@@ -19,8 +19,7 @@ public class SmaliProjectIndexer
     private static final Logger LOG = LogManager.getLogger();
 
     private final Path projectRootPath;
-    private final List<Path> componentList = Lists.newArrayList();
-    private final List<Path> parcableList = Lists.newArrayList();
+    private final Set<Path> componentList = Sets.newHashSet();
     private final Map<String, IndexEntry> indexMap = Maps.newHashMap();
 
     private class IndexerFileVisitor extends SimpleFileVisitor<Path>
@@ -58,7 +57,6 @@ public class SmaliProjectIndexer
         componentList.clear();
         Files.walkFileTree(projectRootPath, new IndexerFileVisitor());
         findComponentClasses();
-        findParcableClasses();
         LOG.info("Indexed {} smali files", indexMap.keySet().size());
         LOG.info("Identified {} component classes", componentList.size());
         LOG.info("Identified {} parcable classes", componentList.size());
@@ -76,34 +74,20 @@ public class SmaliProjectIndexer
                 final IndexEntry index = indexMap.get(className);
                 if (superClasses.contains(index.getSuperClass()))
                 {
-                    superClasses.add(className);
-                    componentList.add(index.getFilePath());
+                    if (!superClasses.contains(className))
+                    {
+                        componentList.add(index.getFilePath());
+                        superClasses.add(className);
+                    }
                 }
             }
         }
         while (superClasses.size() != lastSize);
     }
 
-    private void findParcableClasses()
-    {
-        for (final String className : indexMap.keySet())
-        {
-            final IndexEntry index = indexMap.get(className);
-            if (index.getImplementedClasses().contains(Constants.PARCABLE_CLASS))
-            {
-                parcableList.add(index.getFilePath());
-            }
-        }
-    }
-
-    public List<Path> getComponentList()
+    public Set<Path> getComponentList()
     {
         return componentList;
-    }
-
-    public List<Path> getParcableList()
-    {
-        return parcableList;
     }
 
     public Map<String, IndexEntry> getIndexMap()

@@ -45,7 +45,7 @@ public class SmaliAnalyzer
         final CommandLineParser parser = new DefaultParser();
         final CommandLine cmd = parser.parse(options, args);
 
-        if (cmd.hasOption("h") || args.length == 0)
+        if (cmd.hasOption("h") || args.length == 0 || cmd.getArgs().length != 0)
         {
             HelpFormatter helpFormatter = new HelpFormatter();
             helpFormatter.printHelp("SmaliAnalyzer", options);
