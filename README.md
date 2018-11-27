@@ -18,7 +18,7 @@ The `SmaliAnalyzer` tool offers a range of command line options:
 Furthermore, the tool can be configured by adjusting its `application.properties` file:
 ```properties
 # path pointing to an installation of Android's aapt tool
-tools.android.sdk.aapt.path=/home/mark/Android/Sdk/build-tools/27.0.3/aapt
+tools.android.sdk.aapt.path=~/Android/Sdk/build-tools/27.0.3/aapt
 # path pointing to an installation of the radamsa tool
 tools.radamsa.path=radamsa
 # maximum recursion depth of the analyzer
