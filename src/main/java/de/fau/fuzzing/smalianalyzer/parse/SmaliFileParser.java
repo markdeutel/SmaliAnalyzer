@@ -36,12 +36,13 @@ public class SmaliFileParser
                 if (line.equals("# direct methods") || line.equals("# static fields") || line.equals("# annotations"))
                     break;
 
+                final String name = line.substring(line.lastIndexOf(' ')).trim();
                 if (line.startsWith(".class"))
-                    header.setClassName(line.substring(line.lastIndexOf(' ')).trim());
+                    header.setClassName(name);
                 else if (line.startsWith(".super"))
-                    header.setSuperName(line.substring(line.lastIndexOf(' ')).trim());
+                    header.setSuperName(name);
                 else if (line.startsWith(".implements"))
-                    header.addImplementedClass(line.substring(line.lastIndexOf(' ')).trim());
+                    header.addImplementedClass(name);
             }
 
             if (header.getClassName() == null || header.getSuperName() == null)
@@ -119,6 +120,34 @@ public class SmaliFileParser
                                 stringSet.add(value.trim());
                         }
                     }
+                }
+            }
+        }
+    }
+
+    public static void parseParcelableClass(final Path filePath, final Map<String, String> resultMap) throws IOException
+    {
+        try(final BufferedReader reader = Files.newBufferedReader(filePath))
+        {
+            String line;
+            while ((line = reader.readLine()) != null)
+            {
+                line = line.trim();
+                if (line.startsWith(".field"))
+                {
+                    final String[] tokens = line.split(" ");
+                    if (tokens.length >= 2)
+                    {
+                        final String[] var = tokens[tokens.length - 1].split(":");
+                        if (var.length == 2)
+                        {
+                            resultMap.put(var[0], var[1]);
+                        }
+                    }
+                }
+                else if (line.startsWith(".method"))
+                {
+                    break;
                 }
             }
         }

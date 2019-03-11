@@ -25,6 +25,8 @@ public class Constants
             "Landroid/service/restrictions/RestrictionsReceiver;"
     );
 
+    public static final Set<String> ANDROID_PARCELABLE = Sets.newHashSet("Landroid/os/Parcelable;");
+
     public static final Set<String> COMPONENT_ENTRY_METHODS = Sets.newHashSet(
             // activity
             "onCreate(Landroid/os/Bundle;)V",
@@ -38,5 +40,4 @@ public class Constants
 
     public static final String INTENT_CLASS = "Landroid/content/Intent;";
     public static final String BUNDLE_CLASS = "Landroid/os/Bundle;";
-    public static final String PARCABLE_CLASS = "Landroid/os/Parcelable;";
 }

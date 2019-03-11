@@ -8,13 +8,13 @@ public class IndexEntry
 {
     private Path filePath;
     private String superClass;
-    private List<String> implementedClasses = new ArrayList<>();
+    private List<String> implementedInterfaces;
 
     public IndexEntry(Path filePath, SmaliHeader header)
     {
         this.filePath = filePath;
         this.superClass = header.getSuperName();
-        this.implementedClasses = header.getImplementedClasses();
+        this.implementedInterfaces = header.getImplementedClasses();
     }
 
     public Path getFilePath()
@@ -37,13 +37,13 @@ public class IndexEntry
         this.superClass = superClass;
     }
 
-    public List<String> getImplementedClasses()
+    public List<String> getImplementedInterfaces()
     {
-        return implementedClasses;
+        return implementedInterfaces;
     }
 
-    public void setImplementedClasses(List<String> implementedClasses)
+    public void setImplementedInterfaces(List<String> implementedClasses)
     {
-        this.implementedClasses = implementedClasses;
+        this.implementedInterfaces = implementedClasses;
     }
 }

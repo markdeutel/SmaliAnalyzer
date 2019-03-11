@@ -116,6 +116,7 @@ public class SmaliAnalyzer
         final Path rootPath = Paths.get(sourcePath.toString().replaceAll(".apk", "/"));
         try
         {
+            // decode the apk file, parse the application manifest file and index the decoded smali code
             System.out.println(String.format("Decoding apk file: %s", sourcePath.toString()));
             ApkDecoder.decode(sourcePath, rootPath);
 
@@ -126,15 +127,37 @@ public class SmaliAnalyzer
             final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
             indexer.indexProject();
 
+            // parse all parcelable classes
             int count = 0;
+            long numFields = 0;
+            System.out.println("Parsing found parcelables");
+            final Map<String, Map<String, String>> parcelableResult = Maps.newHashMap();
+            for (final Path filePath : indexer.getParcelableSet())
+            {
+                System.out.print(buildProgressBar(count, indexer.getParcelableSet().size(), 60));
+                final String className = getJavaClassName(rootPath, filePath);
+                final Map<String, String> parcelableClassResult = Maps.newHashMap();
+                SmaliFileParser.parseParcelableClass(filePath, parcelableClassResult);
+                if (!parcelableClassResult.isEmpty())
+                {
+                    parcelableResult.put(className, parcelableClassResult);
+                    numFields += parcelableClassResult.size();
+                }
+                count++;
+            }
+            System.out.print(clearProgressBar(60));
+            System.out.println("Tracked " + numFields + " fields");
+
+            // parse all found component classes
+            count = 0;
             long numInvocations = 0;
             System.out.println("Parsing found components");
             final Map<String, ParsingResult> result = Maps.newHashMap();
             final Set<String> stringSet = Sets.newHashSet();
-            for (final Path filePath : indexer.getComponentList())
+            for (final Path filePath : indexer.getComponentSet())
             {
-                System.out.print(buildProgressBar(count, indexer.getComponentList().size(), 60));
-                final String componentName = getComponentName(rootPath, filePath);
+                System.out.print(buildProgressBar(count, indexer.getComponentSet().size(), 60));
+                final String className = getJavaClassName(rootPath, filePath);
                 final SetMultimap<String, String> intentResults = HashMultimap.create();
                 final SetMultimap<String, String> bundleResults = HashMultimap.create();
                 for (final String methodName : Constants.COMPONENT_ENTRY_METHODS)
@@ -147,17 +170,20 @@ public class SmaliAnalyzer
                 numInvocations += bundleResults.values().size();
 
                 if (!intentResults.isEmpty() || !bundleResults.isEmpty())
-                    result.put(componentName, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
+                    result.put(className, new ParsingResult(intentResults.asMap(), bundleResults.asMap()));
 
                 count++;
             }
-
             System.out.print(clearProgressBar(60));
             System.out.println("Tracked " + numInvocations + " invocations");
 
-            // write parsing results to file
+            // write results to file
             if (Files.notExists(outputPath.toAbsolutePath().getParent(), LinkOption.NOFOLLOW_LINKS))
                 Files.createDirectories(outputPath);
+
+            final Path parcOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".parc"));
+            System.out.println(String.format("Writing PARCELABLE results to file: %s", parcOutputPath.toString()));
+            OutputWriter.writeToJSONFile(parcOutputPath, parcelableResult);
 
             final Path jsonOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".json"));
             System.out.println(String.format("Writing JSON results to file: %s", jsonOutputPath.toString()));
@@ -183,7 +209,7 @@ public class SmaliAnalyzer
         }
     }
 
-    private static String getComponentName(final Path rootPath, final Path filePath)
+    private static String getJavaClassName(final Path rootPath, final Path filePath)
     {
         String relPathStr = rootPath.toAbsolutePath().relativize(filePath.toAbsolutePath()).toString();
         return relPathStr.replaceAll("/", ".").replaceAll(".smali", "");
