@@ -6,16 +6,17 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Properties;
 
 public class ApplicationProperties
 {
     private static final Logger LOG = LogManager.getLogger();
-    private static final String PROPERTIES_PATH = Paths.get(ApplicationProperties.class.getProtectionDomain()
-            .getCodeSource().getLocation().getPath()).getParent().resolve("application.properties").toString();
+    private static final String PROPERTIES_PATH = "application.properties";
 
-    private String aaptPath = null;
     private String radamsaPath = null;
     private int maxDepth = 0;
 
@@ -25,9 +26,9 @@ public class ApplicationProperties
     {
         try
         {
+            final InputStream propertiesStream = ClassLoader.getSystemClassLoader().getResourceAsStream(PROPERTIES_PATH);
             final Properties properties = new Properties();
-            properties.load(new FileInputStream(new File(PROPERTIES_PATH)));
-            aaptPath = properties.getProperty("tools.android.sdk.aapt.path", ".");
+            properties.load(propertiesStream);
             radamsaPath = properties.getProperty("tools.radamsa.path", ".");
             maxDepth = Integer.parseInt(properties.getProperty("constants.max.depth", "0"));
         }
@@ -44,11 +45,6 @@ public class ApplicationProperties
             ApplicationProperties.instance = new ApplicationProperties();
         }
         return ApplicationProperties.instance;
-    }
-
-    public String getAAPTPath()
-    {
-        return aaptPath;
     }
 
     public String getRadamsaPath() { return radamsaPath; }

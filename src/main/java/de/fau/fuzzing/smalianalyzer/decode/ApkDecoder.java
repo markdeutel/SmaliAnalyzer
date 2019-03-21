@@ -16,7 +16,9 @@ import org.jf.dexlib2.dexbacked.ZipDexContainer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URISyntaxException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -97,16 +99,13 @@ public class ApkDecoder
         }
     }
 
-    public static Map<String, IntentFilters> decodeManifest(final Path apkFilePath) throws IOException
+    public static Map<String, IntentFilters> decodeManifest(final Path apkFilePath) throws IOException, URISyntaxException
     {
         LOG.info("Decoding AndroidManifest.xml file");
         final Map<String, IntentFilters> result = Maps.newHashMap();
-        final String[] cmd = {ApplicationProperties.getInstance().getAAPTPath(), "d", "xmltree", apkFilePath.toString(), "AndroidManifest.xml"};
-        final Process process = Runtime.getRuntime().exec(cmd);
-        try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream())))
+        final InputStream stream = ProcessExecutor.executeAAPT2(apkFilePath.toString());
+        try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(stream)))
         {
-            try (final BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream())))
-            {
                 IntentFilters filters = null;
                 String line, componentName = "";
                 boolean dataMode = false;
@@ -165,13 +164,7 @@ public class ApkDecoder
                 if (filters != null && !filters.isEmpty())
                     result.put(componentName, filters);
 
-                while ((line = errorReader.readLine()) != null)
-                {
-                    LOG.error(line);
-                }
-
                 return result;
-            }
         }
     }
 
