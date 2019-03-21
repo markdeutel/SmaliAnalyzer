@@ -116,13 +116,18 @@ public class SmaliAnalyzer
         final Path rootPath = Paths.get(sourcePath.toString().replaceAll(".apk", "/"));
         try
         {
-            // decode the apk file, parse the application manifest file and index the decoded smali code
+            // decode the apk file, parse the application manifest file
             System.out.println(String.format("Decoding apk file: %s", sourcePath.toString()));
             ApkDecoder.decode(sourcePath, rootPath);
 
             System.out.println("Parsing application manifest");
             final Map<String, ApkDecoder.IntentFilters> manifestResult = ApkDecoder.decodeManifest(sourcePath);
+            final Path metaOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".meta"));
+            System.out.println(String.format("Writing META results to file: %s", metaOutputPath.toString()));
+            OutputWriter.writeToJSONFile(metaOutputPath, manifestResult);
+            manifestResult.clear();
 
+            // index the decoded smali code
             System.out.println("Indexing smali code");
             final SmaliProjectIndexer indexer = new SmaliProjectIndexer(rootPath);
             indexer.indexProject();
@@ -147,6 +152,11 @@ public class SmaliAnalyzer
             }
             System.out.print(clearProgressBar(60));
             System.out.println("Tracked " + numFields + " fields");
+
+            final Path parcOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".parc"));
+            System.out.println(String.format("Writing PARCELABLE results to file: %s", parcOutputPath.toString()));
+            OutputWriter.writeToJSONFile(parcOutputPath, parcelableResult);
+            parcelableResult.clear();
 
             // parse all found component classes
             count = 0;
@@ -181,17 +191,9 @@ public class SmaliAnalyzer
             if (Files.notExists(outputPath.toAbsolutePath().getParent(), LinkOption.NOFOLLOW_LINKS))
                 Files.createDirectories(outputPath);
 
-            final Path parcOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".parc"));
-            System.out.println(String.format("Writing PARCELABLE results to file: %s", parcOutputPath.toString()));
-            OutputWriter.writeToJSONFile(parcOutputPath, parcelableResult);
-
             final Path jsonOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".json"));
             System.out.println(String.format("Writing JSON results to file: %s", jsonOutputPath.toString()));
             OutputWriter.writeToJSONFile(jsonOutputPath, result);
-
-            final Path metaOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".meta"));
-            System.out.println(String.format("Writing META results to file: %s", metaOutputPath.toString()));
-            OutputWriter.writeToJSONFile(metaOutputPath, manifestResult);
 
             final Path stringOutputPath = outputPath.resolve(sourcePath.getFileName().toString().replace(".apk", ".str"));
             System.out.println(String.format("Writing STRING results to file: %s", stringOutputPath.toString()));

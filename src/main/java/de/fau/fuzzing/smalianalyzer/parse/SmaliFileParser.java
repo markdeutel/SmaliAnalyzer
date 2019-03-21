@@ -133,7 +133,7 @@ public class SmaliFileParser
             while ((line = reader.readLine()) != null)
             {
                 line = line.trim();
-                if (line.startsWith(".field"))
+                if (line.startsWith(".field") && !line.contains("static"))
                 {
                     final String[] tokens = line.split(" ");
                     if (tokens.length >= 2)
