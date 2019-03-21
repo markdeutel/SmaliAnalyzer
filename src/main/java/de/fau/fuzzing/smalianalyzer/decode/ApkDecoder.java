@@ -3,7 +3,6 @@ package de.fau.fuzzing.smalianalyzer.decode;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import de.fau.fuzzing.smalianalyzer.ApplicationProperties;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,65 +105,64 @@ public class ApkDecoder
         final InputStream stream = ProcessExecutor.executeAAPT2(apkFilePath.toString());
         try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(stream)))
         {
-                IntentFilters filters = null;
-                String line, componentName = "";
-                boolean dataMode = false;
-                while ((line = inputReader.readLine()) != null)
+            IntentFilters filters = null;
+            String line, componentName = "";
+            boolean dataMode = false;
+            while ((line = inputReader.readLine()) != null)
+            {
+                if (dataMode)
                 {
-                    if (dataMode)
+                    List<String> names = Lists.newArrayList("android:scheme", "android:host",
+                            "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
+                    Map<String, String> dataValues = Maps.newHashMap();
+                    while ((line = inputReader.readLine()) != null)
                     {
+                        line = line.trim();
+                        if (!line.startsWith("A: "))
+                            break;
 
-                        List<String> names = Lists.newArrayList("android:scheme", "android:host",
-                                "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
-                        Map<String, String> dataValues = Maps.newHashMap();
-                        while ((line = inputReader.readLine()) != null)
+                        final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
+                        if (matcher.find())
                         {
-                            line = line.trim();
-                            if (!line.startsWith("A: "))
-                                break;
-
-                            final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
-                            if (matcher.find())
-                            {
-                                String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
-                                String value = line.substring(line.indexOf('"') + 1);
-                                dataValues.put(name, value.substring(0, value.indexOf('"')));
-                            }
+                            String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
+                            String value = line.substring(line.indexOf('"') + 1);
+                            dataValues.put(name, value.substring(0, value.indexOf('"')));
                         }
-
-                        final String dataString = buildDataURI(dataValues);
-                        filters.data.add(dataString);
-                        dataMode = false;
                     }
 
-                    line = line.trim();
-                    String dataTag = getDataTag(line);
-                    switch (dataTag)
-                    {
-                        case "activity":
-                        case "service":
-                        case "receiver":
-                            if (filters != null && !filters.isEmpty())
-                                result.put(componentName, filters);
-                            filters = new IntentFilters();
-                            componentName = getAttributeValue(inputReader, line, "android:name");
-                            break;
-                        case "action":
-                            filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
-                            break;
-                        case "category":
-                            filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
-                            break;
-                        case "data":
-                            dataMode = true;
-                            break;
-                    }
+                    final String dataString = buildDataURI(dataValues);
+                    filters.data.add(dataString);
+                    dataMode = false;
                 }
 
-                if (filters != null && !filters.isEmpty())
-                    result.put(componentName, filters);
+                line = line.trim();
+                String dataTag = getDataTag(line);
+                switch (dataTag)
+                {
+                    case "activity":
+                    case "service":
+                    case "receiver":
+                        if (filters != null && !filters.isEmpty())
+                            result.put(componentName, filters);
+                        filters = new IntentFilters();
+                        componentName = getAttributeValue(inputReader, line, "android:name");
+                        break;
+                    case "action":
+                        filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
+                        break;
+                    case "category":
+                        filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
+                        break;
+                    case "data":
+                        dataMode = true;
+                        break;
+                }
+            }
 
-                return result;
+            if (filters != null && !filters.isEmpty())
+                result.put(componentName, filters);
+
+            return result;
         }
     }
 
@@ -184,7 +182,7 @@ public class ApkDecoder
             if (!line.startsWith("A: "))
                 break;
 
-            final Matcher matcher = Pattern.compile("A: " + name + ".*=.* \\(Raw: .*\\)").matcher(line);
+            final Matcher matcher = Pattern.compile("A: http://schemas.android.com/apk/res/" + name + ".*=.* \\(Raw: .*\\)").matcher(line);
             if (matcher.find())
             {
                 String value = line.substring(line.indexOf('"') + 1);
@@ -198,10 +196,13 @@ public class ApkDecoder
     {
         // <scheme>://<host>:<port>[<path>|<pathPrefix>|<pathPattern>]
         final StringBuilder sb = new StringBuilder();
-        sb.append(values.getOrDefault("android:scheme", "%s")).append("://").append(values.getOrDefault("android:host", "%s"))
-                .append(":").append(values.getOrDefault("android:port", "%s")).append(values.getOrDefault("android:path", "%s"))
-                .append(values.getOrDefault("android:pathPrefix", "")).append(values.getOrDefault("android:pathPattern", "."));
-        return sb.toString();
+        sb.append(values.getOrDefault("http://schemas.android.com/apk/res/android:scheme", "%s")).append("://")
+                .append(values.getOrDefault(" http://schemas.android.com/apk/res/android:host", "%s"))
+                .append(":").append(values.getOrDefault("http://schemas.android.com/apk/res/android:port", "%s"))
+                .append(values.getOrDefault("http://schemas.android.com/apk/res/android:path", "%s"))
+                .append(values.getOrDefault("http://schemas.android.com/apk/res/android:pathPrefix", ""))
+                .append(values.getOrDefault("http://schemas.android.com/apk/res/android:pathPattern", ""));
+        return sb.toString().replace(".*", "%s");
     }
 
     public static void deleteTemporaryFiles(final Path filePath)
