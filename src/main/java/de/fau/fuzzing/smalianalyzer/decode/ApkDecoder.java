@@ -15,7 +15,6 @@ import org.jf.dexlib2.dexbacked.ZipDexContainer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URISyntaxException;
 import java.nio.file.FileSystems;
@@ -102,67 +101,69 @@ public class ApkDecoder
     {
         LOG.info("Decoding AndroidManifest.xml file");
         final Map<String, IntentFilters> result = Maps.newHashMap();
-        final InputStream stream = ProcessExecutor.executeAAPT2(apkFilePath.toString());
-        try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(stream)))
+        try (final ProcessExecutor processExecutor = new ProcessExecutor(apkFilePath))
         {
-            IntentFilters filters = null;
-            String line, componentName = "";
-            boolean dataMode = false;
-            while ((line = inputReader.readLine()) != null)
+            try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(processExecutor.getProcessStream())))
             {
-                if (dataMode)
+                IntentFilters filters = null;
+                String line, componentName = "";
+                boolean dataMode = false;
+                while ((line = inputReader.readLine()) != null)
                 {
-                    List<String> names = Lists.newArrayList("android:scheme", "android:host",
-                            "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
-                    Map<String, String> dataValues = Maps.newHashMap();
-                    while ((line = inputReader.readLine()) != null)
+                    if (dataMode)
                     {
-                        line = line.trim();
-                        if (!line.startsWith("A: "))
-                            break;
-
-                        final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
-                        if (matcher.find())
+                        List<String> names = Lists.newArrayList("android:scheme", "android:host",
+                                "android:port", "android:path", "android:pathPrefix", "android:pathPattern");
+                        Map<String, String> dataValues = Maps.newHashMap();
+                        while ((line = inputReader.readLine()) != null)
                         {
-                            String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
-                            String value = line.substring(line.indexOf('"') + 1);
-                            dataValues.put(name, value.substring(0, value.indexOf('"')));
+                            line = line.trim();
+                            if (!line.startsWith("A: "))
+                                break;
+
+                            final Matcher matcher = Pattern.compile("A: .*\\(.*\\)=.* \\(Raw: .*\\)").matcher(line);
+                            if (matcher.find())
+                            {
+                                String name = line.substring(line.indexOf(' ') + 1, line.indexOf('('));
+                                String value = line.substring(line.indexOf('"') + 1);
+                                dataValues.put(name, value.substring(0, value.indexOf('"')));
+                            }
                         }
+
+                        final String dataString = buildDataURI(dataValues);
+                        filters.data.add(dataString);
+                        dataMode = false;
                     }
 
-                    final String dataString = buildDataURI(dataValues);
-                    filters.data.add(dataString);
-                    dataMode = false;
+                    line = line.trim();
+                    String dataTag = getDataTag(line);
+                    switch (dataTag)
+                    {
+                        case "activity":
+                        case "service":
+                        case "receiver":
+                            if (filters != null && !filters.isEmpty())
+                                result.put(componentName, filters);
+                            filters = new IntentFilters();
+                            componentName = getAttributeValue(inputReader, line, "android:name");
+                            break;
+                        case "action":
+                            filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
+                            break;
+                        case "category":
+                            filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
+                            break;
+                        case "data":
+                            dataMode = true;
+                            break;
+                    }
                 }
 
-                line = line.trim();
-                String dataTag = getDataTag(line);
-                switch (dataTag)
-                {
-                    case "activity":
-                    case "service":
-                    case "receiver":
-                        if (filters != null && !filters.isEmpty())
-                            result.put(componentName, filters);
-                        filters = new IntentFilters();
-                        componentName = getAttributeValue(inputReader, line, "android:name");
-                        break;
-                    case "action":
-                        filters.actions.add(getAttributeValue(inputReader, line, "android:name"));
-                        break;
-                    case "category":
-                        filters.categories.add(getAttributeValue(inputReader, line, "android:name"));
-                        break;
-                    case "data":
-                        dataMode = true;
-                        break;
-                }
+                if (filters != null && !filters.isEmpty())
+                    result.put(componentName, filters);
+
+                return result;
             }
-
-            if (filters != null && !filters.isEmpty())
-                result.put(componentName, filters);
-
-            return result;
         }
     }
 
